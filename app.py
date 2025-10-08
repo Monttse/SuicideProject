@@ -96,8 +96,9 @@ st.header("3. Validación y Caracterización del Modelo (t-SNE)")
 st.markdown("La visualización t-SNE comprime las múltiples dimensiones en dos. La **superposición** de los grupos indica que el modelo es mejor para la segmentación de políticas públicas que para la predicción individual.")
 
 try:
-    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_column_width=True)
+    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_column_width=False)
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}. Asegúrate de guardar la imagen con el nombre correcto.")
+
 
 
