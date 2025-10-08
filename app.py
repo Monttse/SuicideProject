@@ -105,7 +105,7 @@ except FileNotFoundError:
 
 # ... (resto de tu código de app.py)
 
-GEOJSON_URL = 'https://drive.google.com/uc?export=download&id=1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN/view?usp=sharing' 
+GEOJSON_URL = 'https://drive.google.com/uc?id=1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN'
 # ... (carga de datos)
 
 # --- FUNCIÓN DE CARGA CACHEADA para GeoJSON ---
@@ -181,6 +181,7 @@ if df_final is not None and mx_geojson is not None:
     
 else:
     st.warning("Advertencia: No se pueden mostrar los datos geográficos. Verifica que los archivos y columnas estén presentes.")
+
 
 
 
