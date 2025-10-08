@@ -41,7 +41,7 @@ try:
     st.dataframe(
         df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño del Cluster']),
         hide_index=True,
-        use_column_width=True
+        use_container_width=True
     )
     st.caption("Los 4 perfiles se definen por la moda de variables sociodemográficas (sexo, ocupación, horario) y el promedio de la edad.")
 
@@ -96,9 +96,10 @@ st.header("3. Validación y Caracterización del Modelo (t-SNE)")
 st.markdown("La visualización t-SNE comprime las múltiples dimensiones en dos. La **superposición** de los grupos indica que el modelo es mejor para la segmentación de políticas públicas que para la predicción individual.")
 
 try:
-    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_column_width=False)
+    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=False)
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}. Asegúrate de guardar la imagen con el nombre correcto.")
+
 
 
 
