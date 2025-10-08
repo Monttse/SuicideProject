@@ -5,6 +5,7 @@ import plotly.express as px
 import gdown
 import json
 import os
+import pydeck as pdk
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide")
@@ -98,28 +99,62 @@ try:
         df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
 
         # --- CREACIÓN DEL MAPA (CHOROPLETH) ---
-        fig = px.choropleth(
-            df_mapa, 
-            geojson=mx_geojson, 
-            locations='CVE_ENT', 
-            color='Porcentaje Cluster 2', 
-            color_continuous_scale="Reds", 
-            # Ya no usamos range_color
-            featureidkey='properties.CVE_ENT', 
-            projection="mercator",
-            labels={'Porcentaje Cluster 2':'% Cluster 2'}
-        )
-         # Forzamos los límites geográficos para que el mapa de México se dibuje correctamente
-        fig.update_geos(
-            visible=False, 
-            scope='north america', 
-            lataxis_range=[14, 34],   
-            lonaxis_range=[-120, -85], 
+        st.subheader("Mapa de Concentración del Riesgo Principal (Cluster 2)")
+
+        # --- LÓGICA: CALCULAR PORCENTAJE DE CONCENTRACIÓN DEL CLUSTER 2 ---
+        df_conteo_total = df_final.groupby('ent_resid').size().reset_index(name='Total Casos')
+        df_conteo_cluster2 = df_final[df_final['cluster'] == 2].groupby('ent_resid').size().reset_index(name='Casos Cluster 2')
+        df_mapa = pd.merge(df_conteo_total, df_conteo_cluster2, on='ent_resid', how='left').fillna(0)
+        df_mapa['Porcentaje Cluster 2'] = (df_mapa['Casos Cluster 2'] / df_mapa['Total Casos']) * 100
+        df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
+        
+        # Necesitamos la tabla completa con el GeoJSON
+        geojson_data = mx_geojson # Tu GeoJSON que ya cargaste
+        
+        # --- CREACIÓN DEL MAPA CON PYDECK (LA SOLUCIÓN ESTABLE) ---
+        
+        # Encuentra el centro de México para la vista inicial
+        lat_centro = 23.6345
+        lon_centro = -102.5528
+        
+        # Generamos la información de color. Pydeck usa el formato R, G, B, A (0-255)
+        # Queremos Rojo, basado en el porcentaje (50% = rojo medio, 100% = rojo fuerte)
+        # La escala será: 0-100% de Porcentaje Cluster 2 -> 0-255 en el canal R
+        
+        df_mapa['red_intensity'] = (df_mapa['Porcentaje Cluster 2'] / df_mapa['Porcentaje Cluster 2'].max() * 255).astype(int)
+        
+        # Creamos una capa GeoJson con Pydeck
+        geojson_layer = pdk.Layer(
+            "GeoJsonLayer",
+            geojson_data,
+            get_fill_color="[red_intensity, 0, 0, 160]", # [R, G, B, Alpha] - Usamos la intensidad roja calculada
+            get_line_color=[0, 0, 0], # Líneas negras
+            line_width_min_pixels=1,
+            pickable=True, # Permite la interacción
         )
 
-        # El resto del layout es igual
-        fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
-        st.plotly_chart(fig, use_container_width=True)
+        # Definimos la vista inicial del mapa (Centrado en México)
+        view_state = pdk.ViewState(
+            latitude=lat_centro,
+            longitude=lon_centro,
+            zoom=4.5,
+            min_zoom=4,
+            max_zoom=10,
+            pitch=0,
+        )
+
+        # Renderizamos el mapa en Streamlit
+        st.pydeck_chart(pdk.Deck(
+            map_style="mapbox://styles/mapbox/light-v9", # Estilo de mapa claro
+            initial_view_state=view_state,
+            layers=[geojson_layer],
+        ))
+        
+        # Agregamos una leyenda simple
+        st.caption("Intensidad de color rojo = Mayor concentración del Perfil de Riesgo Principal (Cluster 2).")
+
+        st.markdown("---")
+        # El resto de la sección de análisis detallado con st.selectbox sigue igual        
         st.caption("Cada estado está coloreado por la concentración porcentual del Perfil de Riesgo Principal (Cluster 2).")
 
         st.markdown("---")
@@ -157,6 +192,7 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
 
 
