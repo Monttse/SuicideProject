@@ -108,8 +108,12 @@ try:
             projection="mercator",
             labels={'Porcentaje Cluster 2':'% Cluster 2'}
         )
-        
-        fig.update_geos(fitbounds="locations", visible=False)
+        fig.update_geos(
+            visible=False, 
+            scope='north america', # Enfoca el mapa en Norteamérica
+            lataxis_range=[14, 34],   # Límites de latitud (México)
+            lonaxis_range=[-120, -85], # Límites de longitud (México)
+        )
         fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
         st.plotly_chart(fig, use_container_width=True)
         st.caption("Cada estado está coloreado por la concentración porcentual del Perfil de Riesgo Principal (Cluster 2).")
@@ -149,5 +153,6 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
 
