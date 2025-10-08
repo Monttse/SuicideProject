@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np # Necesario si usas np.nan o transformaciones
+import requests
 import json # Para cargar el GeoJSON
 import plotly.express as px # Para crear el mapa
 
@@ -104,20 +105,31 @@ except FileNotFoundError:
 
 # ... (resto de tu código de app.py)
 
-GEOJSON_PATH = 'mexico.json' # Asegúrate que este nombre es correcto
+GEOJSON_URL = 'https://drive.google.com/uc?export=download&id=1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN/view?usp=sharing' 
 # ... (carga de datos)
 
 # --- FUNCIÓN DE CARGA CACHEADA para GeoJSON ---
 @st.cache_data
-def load_geojson(path):
+def load_geojson(url):
     try:
-        with open(path) as f:
-            return json.load(f)
-    except FileNotFoundError:
-        st.error(f"Error: No se encontró el archivo GeoJSON en {path}.")
+        # Descarga el archivo de la URL
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            # Si la descarga es exitosa, usamos el contenido (decodificado como UTF-8 si fuera necesario)
+            # Como es un JSON, podemos usar response.json()
+            return response.json() 
+        else:
+            # Esto atraparía errores 404, 403, etc.
+            st.error(f"Error al descargar GeoJSON. Código HTTP: {response.status_code}. Verifica permisos.")
+            return None
+    except Exception as e:
+        # Esto atrapa errores de conexión
+        st.error(f"Error de conexión: {e}")
         return None
 
-mx_geojson = load_geojson(GEOJSON_PATH)
+# Usamos la URL en lugar de la ruta local
+mx_geojson = load_geojson(GEOJSON_URL)
 
 # --- 3. FOCO GEOGRÁFICO ACCIONABLE (MAPA INTERACTIVO) ---
 st.header("2. Foco de Intervención Geográfica (Mapa de Riesgo Dominante)")
@@ -169,6 +181,7 @@ if df_final is not None and mx_geojson is not None:
     
 else:
     st.warning("Advertencia: No se pueden mostrar los datos geográficos. Verifica que los archivos y columnas estén presentes.")
+
 
 
 
