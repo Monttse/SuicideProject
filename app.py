@@ -9,7 +9,7 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 K_OPTIMO = 4 
 DF_PATH = 'datos_agrupados.parquet'
 PERFILES_PATH = 'perfiles.csv'
-TSNE_PATH = '13.tsne.png' # Cambia este nombre si tu archivo es diferente (ej: 'image_eed6c1.jpg')
+TSNE_PATH = '13.tsne.PNG' # Cambia este nombre si tu archivo es diferente (ej: 'image_eed6c1.jpg')
 
 # --- FUNCIÓN DE CARGA CACHEADA (Para velocidad) ---
 @st.cache_data
@@ -99,4 +99,5 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_column_width=True)
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}. Asegúrate de guardar la imagen con el nombre correcto.")
+
 
