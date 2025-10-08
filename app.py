@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np # Necesario si usas np.nan o transformaciones
 import requests
 import json # Para cargar el GeoJSON
+import gdown 
+import json
+import os
 import plotly.express as px # Para crear el mapa
 
 # --- CONFIGURACIÓN DE PÁGINA ---
@@ -104,32 +107,36 @@ except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}. Asegúrate de guardar la imagen con el nombre correcto.")
 
 # ... (resto de tu código de app.py)
+GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN' 
 
-GEOJSON_URL = 'https://drive.google.com/uc?id=1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN&confirm=t'
-# ... (carga de datos)
-
-# --- FUNCIÓN DE CARGA CACHEADA para GeoJSON ---
 @st.cache_data
-def load_geojson(url):
+def load_geojson(file_id):
+    # La ubicación temporal donde se guardará el archivo en Streamlit Cloud
+    output_path = "mexico_map_data.json"
+    
     try:
-        # Descarga el archivo de la URL
-        response = requests.get(url)
+        st.info("Descargando archivo GeoJSON de Google Drive...")
         
-        if response.status_code == 200:
-            # Si la descarga es exitosa, usamos el contenido (decodificado como UTF-8 si fuera necesario)
-            # Como es un JSON, podemos usar response.json()
-            return response.json() 
-        else:
-            # Esto atraparía errores 404, 403, etc.
-            st.error(f"Error al descargar GeoJSON. Código HTTP: {response.status_code}. Verifica permisos.")
-            return None
+        # 1. DESCARGA: gdown maneja la confirmación y seguridad de Drive.
+        gdown.download(id=file_id, output=output_path, quiet=False, fuzzy=True)
+        
+        # 2. CARGA: Ahora leemos el archivo que está guardado localmente (sin errores de codificación)
+        with open(output_path, encoding='utf-8') as f:
+            data = json.load(f)
+        
+        st.success("GeoJSON cargado correctamente.")
+        return data
+        
+    except FileNotFoundError:
+        st.error("Error: El archivo no se encontró en la ubicación temporal.")
+        return None
     except Exception as e:
-        # Esto atrapa errores de conexión
-        st.error(f"Error de conexión: {e}")
+        # Esto atraparía errores de JSON inválido si la descarga falla por otra razón
+        st.error(f"Error de procesamiento final (GeoJSON no válido): {e}")
         return None
 
-# Usamos la URL en lugar de la ruta local
-mx_geojson = load_geojson(GEOJSON_URL)
+# Llama a la función usando la ID en lugar de la URL
+mx_geojson = load_geojson(GEOJSON_FILE_ID)
 
 # --- 3. FOCO GEOGRÁFICO ACCIONABLE (MAPA INTERACTIVO) ---
 st.header("2. Foco de Intervención Geográfica (Mapa de Riesgo Dominante)")
@@ -181,6 +188,7 @@ if df_final is not None and mx_geojson is not None:
     
 else:
     st.warning("Advertencia: No se pueden mostrar los datos geográficos. Verifica que los archivos y columnas estén presentes.")
+
 
 
 
