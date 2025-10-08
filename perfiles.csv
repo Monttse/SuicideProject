@@ -1,0 +1,5 @@
+Cluster,Perfil de Riesgo,Edad Promedio,Sexo,Edo. Civil,Ocupación,Horario Crítico,Tamaño del Cluster
+0,Joven Inactivo (Desempleo),24.325364667747163,Hombre,1,No_trabaja,Noche (18-23),7404
+1,Adulto Mayor Ocupado (Riesgo Vespertino),59.2103734439834,Hombre,5,Trabaja,Tarde (12-17),7230
+2,Adulto Joven Ocupado (Foco Principal),30.255430606970734,Hombre,1,Trabaja,Noche (18-23),14317
+3,Riesgo Desconocido (Madrugada),32.33617565551055,Hombre,1,No_especificado,Madrugada (00-05),4691
