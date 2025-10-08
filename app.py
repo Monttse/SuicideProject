@@ -15,7 +15,7 @@ PERFILES_PATH = 'perfiles.csv'
 TSNE_PATH = '13.tsne.PNG'          
 
 # GeoJSON ahora es local, ya no necesita ID de Drive
-GEOJSON_PATH = 'mexico_map_data.json' # <--- ¡ESTO CAMBIÓ!
+GEOJSON_PATH = 'mexico.json' # <--- ¡ESTO CAMBIÓ!
 
 # ID DE GOOGLE DRIVE para el DataFrame principal (Sigue siendo GDrive)
 DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
@@ -150,3 +150,4 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
