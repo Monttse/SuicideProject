@@ -16,7 +16,7 @@ TSNE_PATH = '13.tsne.PNG'
 
 # IDs ÚNICAS DE GOOGLE DRIVE (Archivos grandes)
 DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
-GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN'
+GEOJSON_FILE_ID = '1wh3gRuDa2BloX2v1o5ZyUuDsqpeBFp8E'
 
 # --- 1. FUNCIÓN DE CARGA PARA EL GEOJSON (NO SE LLAMA AQUÍ) ---
 # La definimos aquí para que el script la conozca, pero la llamaremos después.
