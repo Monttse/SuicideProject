@@ -91,24 +91,41 @@ try:
         
         st.subheader("Mapa de Concentración del Riesgo Principal (Cluster 2)")
         
-        # --- LÓGICA: CALCULAR PORCENTAJE DE CONCENTRACIÓN DEL CLUSTER 2 ---
+        # --- 1. PREPARACIÓN DE DATOS (DataFrame) ---
         df_conteo_total = df_final.groupby('ent_resid').size().reset_index(name='Total Casos')
         df_conteo_cluster2 = df_final[df_final['cluster'] == 2].groupby('ent_resid').size().reset_index(name='Casos Cluster 2')
         df_mapa = pd.merge(df_conteo_total, df_conteo_cluster2, on='ent_resid', how='left').fillna(0)
         df_mapa['Porcentaje Cluster 2'] = (df_mapa['Casos Cluster 2'] / df_mapa['Total Casos']) * 100
         df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
         
-        # --- PREPARACIÓN DE DATOS PARA PYDECK ---
-        geojson_data = mx_geojson 
-        
         # Escala de color: 0-100% Porcentaje Cluster 2 -> 0-255 en el canal R
-        df_mapa['red_intensity'] = (df_mapa['Porcentaje Cluster 2'] / df_mapa['Porcentaje Cluster 2'].max() * 255).astype(int)
+        # Usamos el máximo para normalizar la intensidad del rojo
+        max_porcentaje = df_mapa['Porcentaje Cluster 2'].max()
+        df_mapa['red_intensity'] = (df_mapa['Porcentaje Cluster 2'] / max_porcentaje * 255).astype(int)
+
+        # --- 2. FUSIÓN DE DATOS EN EL GEOJSON (¡LA CLAVE PARA PYDECK!) ---
+        # Convertimos el DF de color a diccionario para una búsqueda rápida
+        color_lookup = df_mapa.set_index('CVE_ENT')['red_intensity'].to_dict()
         
-        # Creamos una capa GeoJson con Pydeck
+        # Insertamos el valor de color en cada 'feature' del GeoJSON
+        geojson_data = mx_geojson
+        for feature in geojson_data['features']:
+            entidad_id = feature['properties']['CVE_ENT'] # Asumimos que esta es la clave en tu GeoJSON
+            
+            # Buscamos la intensidad del color usando la clave del estado
+            # Usamos 0 si no se encuentra (se queda gris)
+            color_value = color_lookup.get(entidad_id, 0) 
+            
+            # Añadimos la columna de color a las propiedades del GeoJSON
+            feature['properties']['red_intensity'] = color_value
+            
+        # --- 3. CREACIÓN DEL MAPA CON PYDECK ---
+        
+        # La capa ahora puede acceder a 'properties.red_intensity'
         geojson_layer = pdk.Layer(
             "GeoJsonLayer",
-            geojson_data,
-            get_fill_color="[red_intensity, 0, 0, 160]", 
+            geojson_data, # Pasamos el GeoJSON fusionado
+            get_fill_color="[properties.red_intensity, 0, 0, 160]", # <--- Referencia directa a la propiedad
             get_line_color=[0, 0, 0], 
             line_width_min_pixels=1,
             pickable=True,
@@ -132,8 +149,9 @@ try:
         ))
         
         st.caption("Intensidad de color rojo = Mayor concentración del Perfil de Riesgo Principal (Cluster 2).")
-
         st.markdown("---")
+        
+        # --- 4. ANÁLISIS DETALLADO (SELECTBOX) ---
         st.subheader("Análisis Detallado por Entidad")
         
         lista_entidades = sorted(df_final['ent_resid'].unique().tolist())
@@ -156,7 +174,7 @@ try:
          
 except Exception as e:
     st.error(f"Error crítico al generar la sección geográfica: {e}")
-
+    
 st.markdown("---")
 
 # --- SECCIÓN 3: VALIDACIÓN DEL MODELO (t-SNE) ---
@@ -166,6 +184,7 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
 
 
