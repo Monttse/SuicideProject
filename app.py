@@ -1,3 +1,14 @@
+¡Excelente! Ahora sí podemos hacer la corrección definitiva para eliminar el error de duplicidad y el error de tiempo de espera (EOF) causado por la doble carga.
+
+El problema en el código que enviaste es que la función load_data está definida dos veces, y Streamlit se detiene al ver esta duplicación antes de que la aplicación siquiera empiece a dibujar.
+
+He tomado tu código, eliminé las secciones duplicadas, aseguré que las funciones de carga solo usen gdown (ya que es la única manera de que los archivos grandes funcionen) y mantuve todos tus placeholders y lógica de visualización.
+
+Reemplaza el contenido completo de tu app.py con este código corregido y limpio.
+
+Código app.py Estabilizado (Versión Final)
+Python
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,31 +22,34 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 
 # --- VARIABLES Y ARCHIVOS ---
 K_OPTIMO = 4 
-#DF_PATH = 'datos_agrupados.parquet' # Nombre del archivo principal en GitHub
-PERFILES_PATH = 'perfiles.csv'     # Nombre del archivo de perfiles en GitHub
-TSNE_PATH = '13.tsne.PNG'          # Nombre del archivo de imagen en GitHub
+PERFILES_PATH = 'perfiles.csv'     
+TSNE_PATH = '13.tsne.PNG'          
 
-# ID del archivo PARQUET en Google Drive
+# IDs ÚNICAS DE GOOGLE DRIVE (Archivos grandes)
 DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
+GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN'
 
-# --- FUNCIÓN DE CARGA CACHEADA (Para velocidad y GDrive) ---
+# --- 1. CARGA DE DATOS PRINCIPALES (PARQUET) con gdown ---
 @st.cache_data
 def load_data(file_id):
-    # Nombre temporal para el archivo .parquet
+    """Descarga y carga el DataFrame principal usando gdown."""
     output_path_df = "temp_df.parquet"
     
-    with st.spinner('Cargando datos principales desde Google Drive...'):
+    # Usamos st.spinner para avisar al servidor que debe esperar
+    with st.spinner('Cargando datos principales desde Google Drive... (Puede tardar hasta 1 min)'):
         try:
-            # 1. DESCARGA DEL DATAFRAME PRINCIPAL
+            # DESCARGA: gdown
             gdown.download(id=file_id, output=output_path_df, quiet=True, fuzzy=True)
             
-            # 2. CARGA LOCAL
+            # CARGA LOCAL
             df = pd.read_parquet(output_path_df)
             
-            # 3. Limpieza y Verificación
+            # Limpieza y Verificación
+            # CRÍTICO: Asegurarse de que el ID del estado sea string de dos dígitos ('01', '09')
             df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
+            
             if 'cluster' not in df.columns or 'ent_resid' not in df.columns:
-                st.error("Error: El archivo PARQUET no tiene las columnas 'cluster' o 'ent_resid'.")
+                st.error("Error: El archivo PARQUET no tiene las columnas clave.")
                 return None
             
             # Limpiar el archivo temporal
@@ -43,42 +57,22 @@ def load_data(file_id):
             return df
             
         except Exception as e:
-            st.error(f"Error fatal al cargar o descargar el DataFrame principal: {e}")
+            st.error(f"Error fatal al cargar el DataFrame principal: {e}")
             return None
 
-# Llama a la función usando la ID en lugar de la ruta local
 df_final = load_data(DF_FILE_ID)
 
-# ID de Google Drive para el GeoJSON
-GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN'
-
-# --- 1. CARGA DE DATOS PRINCIPALES (PARQUET) ---
-@st.cache_data
-def load_data(path):
-    try:
-        df = pd.read_parquet(path)
-        # CRÍTICO: Asegurarse de que el formato de 'ent_resid' sea string para mapear con GeoJSON
-        df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
-        if 'cluster' not in df.columns or 'ent_resid' not in df.columns:
-            st.error("Error: El archivo PARQUET no tiene las columnas 'cluster' o 'ent_resid'.")
-            return None
-        return df
-    except Exception as e:
-        st.error(f"Error al cargar datos principales: {e}")
-        return None
-
-df_final = load_data(DF_PATH)
-
-# --- 2. CARGA DE GEOJSON DESDE GOOGLE DRIVE (EL FIX CON gdown) ---
+# --- 2. CARGA DE GEOJSON DESDE GOOGLE DRIVE (con gdown) ---
 @st.cache_data
 def load_geojson(file_id):
+    """Descarga y carga el GeoJSON usando gdown."""
     output_path = "mexico_map_data.json"
     
     try:
-        # gdown.download maneja la descarga sin errores de confirmación
+        # DESCARGA: gdown
         gdown.download(id=file_id, output=output_path, quiet=True, fuzzy=True)
         
-        # Leemos el archivo localmente (con encoding='utf-8')
+        # CARGA: Leemos el archivo localmente (con encoding='utf-8')
         with open(output_path, encoding='utf-8') as f:
             data = json.load(f)
         
@@ -87,9 +81,8 @@ def load_geojson(file_id):
         return data
         
     except Exception as e:
-        # Quitamos st.info/success/error para evitar el fallo "Oh no" y solo registramos.
-        # st.error(f"Error fatal al cargar GeoJSON: {e}") # No usar st.error aquí
-        print(f"ERROR GDOWN/JSON: {e}")
+        # Quitamos st.error para evitar el fallo "Oh no" y solo registramos.
+        print(f"ERROR GDOWN/JSON: {e}") 
         return None
 
 mx_geojson = load_geojson(GEOJSON_FILE_ID)
@@ -145,7 +138,7 @@ try:
             geojson=mx_geojson, 
             locations='CVE_ENT', 
             color='Perfil Dominante',
-            featureidkey='properties.CVE_ENT', # CRÍTICO: Asumiendo que es CVE_ENT en el JSON
+            featureidkey='properties.CVE_ENT', 
             projection="mercator",
             color_discrete_map={
                 '0. Joven Inactivo (Desempleo)': 'yellow',
@@ -168,7 +161,7 @@ try:
         entidad_seleccionada = st.selectbox(
             'Selecciona una Entidad de Residencia:',
             lista_entidades,
-            format_func=lambda x: f"Entidad {x}" # Formato solo para el selector
+            format_func=lambda x: f"Entidad {x}"
         )
 
         # Análisis por la Entidad Seleccionada
@@ -179,9 +172,9 @@ try:
         st.caption(f"Distribución porcentual de los 4 perfiles en la entidad {entidad_seleccionada}.")
 
     elif df_final is None:
-         st.error("No se pudo cargar el DataFrame principal. Revisa el archivo PARQUET.")
+         st.error("No se pudo cargar el DataFrame principal. Revisa la ID del archivo PARQUET en Google Drive.")
     elif mx_geojson is None:
-         st.error("El mapa no se pudo cargar. Revisa la ID de Google Drive y que el archivo GeoJSON no esté corrupto.")
+         st.error("El mapa no se pudo cargar. Revisa la ID del GeoJSON en Google Drive.")
          
 except Exception as e:
     st.error(f"Error crítico al generar la sección geográfica: {e}")
@@ -198,4 +191,3 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True)
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
-
