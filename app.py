@@ -11,28 +11,26 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 
 # --- VARIABLES Y ARCHIVOS ---
 K_OPTIMO = 4 
-PERFILES_PATH = 'perfiles.csv'     
-TSNE_PATH = '13.tsne.PNG'          
+PERFILES_PATH = 'perfiles.csv'     # Archivo de perfiles (pequeño, debe estar en GitHub)
+TSNE_PATH = '13.tsne.PNG'          # Imagen t-SNE (debe estar en GitHub)
 
-# IDs ÚNICAS DE GOOGLE DRIVE (Archivos grandes)
-DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
-GEOJSON_FILE_ID = '1wh3gRuDa2BloX2v1o5ZyUuDsqpeBFp8E'
+# IDs DE GOOGLE DRIVE (¡REEMPLAZA ESTAS ID!)
+DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M'    # ID de tu archivo PARQUET
+GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN' # ID de tu archivo GeoJSON SIMPLIFICADO de 6MB
 
-# --- 1. FUNCIÓN DE CARGA PARA EL GEOJSON (NO SE LLAMA AQUÍ) ---
-# La definimos aquí para que el script la conozca, pero la llamaremos después.
+# -----------------------------------------------------------
+# --- FUNCIONES DE CARGA DE DATOS (CACHEADAS) ---
+# -----------------------------------------------------------
+
 @st.cache_data
 def load_geojson(file_id):
-    """Descarga y carga el GeoJSON usando gdown."""
+    """Descarga y carga el GeoJSON simplificado usando gdown."""
     output_path = "mexico_map_data.json"
     
     try:
-        # DESCARGA: gdown (silenciosa)
         gdown.download(id=file_id, output=output_path, quiet=True, fuzzy=True)
-        
         with open(output_path, encoding='utf-8') as f:
             data = json.load(f)
-        
-        # Limpiar el archivo temporal
         os.remove(output_path)
         return data
         
@@ -40,7 +38,6 @@ def load_geojson(file_id):
         print(f"ERROR GDOWN/JSON: {e}") 
         return None
 
-# --- 2. FUNCIÓN DE CARGA PARA EL DF PRINCIPAL (SÍ SE LLAMA AQUÍ) ---
 @st.cache_data
 def load_data(file_id):
     """Descarga y carga el DataFrame principal usando gdown."""
@@ -50,6 +47,8 @@ def load_data(file_id):
         try:
             gdown.download(id=file_id, output=output_path_df, quiet=True, fuzzy=True)
             df = pd.read_parquet(output_path_df)
+            
+            # CRÍTICO: Aseguramos que la clave del estado sea texto de dos dígitos ('01', '09')
             df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
             
             if 'cluster' not in df.columns or 'ent_resid' not in df.columns:
@@ -63,7 +62,8 @@ def load_data(file_id):
             st.error(f"Error fatal al cargar el DataFrame principal: {e}")
             return None
 
-# SOLO LLAMAMOS AL DATAFRAME AQUÍ. LA CARGA DEL GEOJSON SE HACE DESPUÉS.
+# --- LLAMADA INICIAL DE DATOS ---
+# Solo cargamos el DataFrame aquí para no exceder el timeout inicial
 df_final = load_data(DF_FILE_ID)
 
 
@@ -78,8 +78,8 @@ st.markdown("---")
 # --- SECCIÓN 1: PERFILES DE RIESGO ---
 st.header("1. Perfiles de Riesgo Identificados (K=4)")
 
-# ... (El resto de la Sección 1 queda igual) ...
 try:
+    # Carga del archivo de perfiles desde GitHub
     df_perfiles = pd.read_csv(PERFILES_PATH)
     st.dataframe(
         df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño del Cluster']),
@@ -93,52 +93,52 @@ except FileNotFoundError:
 st.markdown("---")
 
 
-# --- SECCIÓN 2: MAPA Y ANÁLISIS GEOGRÁFICO (CARGA DEL GEOJSON AQUÍ) ---
+# --- SECCIÓN 2: MAPA Y ANÁLISIS GEOGRÁFICO ---
 st.header("2. Foco de Intervención Geográfica")
 
 try:
-    # NUEVO: Carga el GeoJSON solo si el DF principal tuvo éxito, y dentro del try/except de la UI
     mx_geojson = None
     if df_final is not None:
+         # Carga el GeoJSON solo si el DF principal se cargó correctamente
          with st.spinner('Cargando datos geográficos para el mapa...'):
              mx_geojson = load_geojson(GEOJSON_FILE_ID)
 
     if df_final is not None and mx_geojson is not None:
         
-        st.subheader("Mapa de Riesgo Dominante por Entidad")
+        st.subheader("Mapa de Concentración del Riesgo Principal (Cluster 2)")
         
-        # 1. Calcular el CLUSTER DOMINANTE por estado
-        df_mapa = df_final.groupby('ent_resid')['cluster'].agg(lambda x: x.mode()[0]).reset_index()
-        df_mapa.rename(columns={'ent_resid': 'CVE_ENT', 'cluster': 'Cluster Dominante'}, inplace=True)
+        # --- NUEVA LÓGICA: CALCULAR PORCENTAJE DE CONCENTRACIÓN DEL CLUSTER 2 ---
         
-        nombres_perfil = {
-            0: "0. Joven Inactivo (Desempleo)",
-            1: "1. Adulto Mayor Ocupado",
-            2: "2. Adulto Joven Ocupado (Foco)",
-            3: "3. Riesgo Desconocido (Madrugada)"
-        }
-        df_mapa['Perfil Dominante'] = df_mapa['Cluster Dominante'].map(nombres_perfil)
+        # 1. Contar el total de casos por estado
+        df_conteo_total = df_final.groupby('ent_resid').size().reset_index(name='Total Casos')
+
+        # 2. Contar los casos del Cluster 2 por estado
+        df_conteo_cluster2 = df_final[df_final['cluster'] == 2].groupby('ent_resid').size().reset_index(name='Casos Cluster 2')
+
+        # 3. Fusionar y Calcular el Porcentaje
+        df_mapa = pd.merge(df_conteo_total, df_conteo_cluster2, on='ent_resid', how='left').fillna(0)
+        df_mapa['Porcentaje Cluster 2'] = (df_mapa['Casos Cluster 2'] / df_mapa['Total Casos']) * 100
+
+        df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
+
+        # --- CREACIÓN DEL MAPA (CHOROPLETH) ---
         
-        # 2. Creación del Mapa (Choropleth)
         fig = px.choropleth(
             df_mapa, 
             geojson=mx_geojson, 
             locations='CVE_ENT', 
-            color='Perfil Dominante',
+            color='Porcentaje Cluster 2', # Usamos el porcentaje como variable de color
+            color_continuous_scale="Reds", # Escala de rojos para el riesgo
+            range_color=(0, df_mapa['Porcentaje Cluster 2'].max()),
             featureidkey='properties.CVE_ENT', 
             projection="mercator",
-            color_discrete_map={
-                '0. Joven Inactivo (Desempleo)': 'yellow',
-                '1. Adulto Mayor Ocupado': 'green',
-                '2. Adulto Joven Ocupado (Foco)': 'red',
-                '3. Riesgo Desconocido (Madrugada)': 'purple'
-            }
+            labels={'Porcentaje Cluster 2':'% Cluster 2'}
         )
         
         fig.update_geos(fitbounds="locations", visible=False)
         fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Cada estado está coloreado por el Perfil de Riesgo que es estadísticamente dominante en esa entidad.")
+        st.caption("Cada estado está coloreado por la concentración porcentual del Perfil de Riesgo Principal (Cluster 2).")
 
         st.markdown("---")
         st.subheader("Análisis Detallado por Entidad")
@@ -161,7 +161,7 @@ try:
     elif df_final is None:
          st.error("No se pudo cargar el DataFrame principal.")
     elif mx_geojson is None:
-         st.error("El mapa no se pudo cargar. Hubo un error al descargar el GeoJSON. Revisa la configuración de Drive.")
+         st.error("El mapa no se pudo cargar. Hubo un error al descargar el GeoJSON. Revisa la ID y los permisos de Drive.")
          
 except Exception as e:
     st.error(f"Error crítico al generar la sección geográfica: {e}")
@@ -170,13 +170,12 @@ st.markdown("---")
 
 
 # --- SECCIÓN 3: VALIDACIÓN DEL MODELO (t-SNE) ---
-# ... (Esta sección queda igual)
 st.header("3. Validación y Caracterización del Modelo (t-SNE)")
 
 st.markdown("La visualización t-SNE comprime las múltiples dimensiones en dos. La **superposición** de los grupos indica que el modelo es mejor para la segmentación de políticas públicas que para la predicción individual.")
 
 try:
-    # Se usa el nombre de la imagen que has provisto en un log anterior
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
