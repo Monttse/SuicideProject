@@ -20,12 +20,15 @@ TSNE_PATH = '13.tsne.PNG' # Cambia este nombre si tu archivo es diferente (ej: '
 # --- FUNCIÓN DE CARGA CACHEADA (Para velocidad) ---
 @st.cache_data
 def load_data(path):
-    # Intentamos cargar el DF completo (el que incluye 'ent_resid' y 'cluster')
     try:
         df = pd.read_parquet(path)
+        # VERIFICACIÓN CRÍTICA: Asegúrate de que las columnas existan
+        if 'cluster' not in df.columns or 'ent_resid' not in df.columns:
+            st.error("Error crítico: El archivo PARQUET no tiene las columnas 'cluster' o 'ent_resid'.")
+            return None
         return df
     except FileNotFoundError:
-        st.error(f"Error: No se encontró el archivo de datos principal en {path}.")
+        st.error(f"Error: No se encontró el archivo de datos principal en {path}. ¿El nombre o la ruta es incorrecta en GitHub?")
         return None
 
 df_final = load_data(DF_PATH)
@@ -139,48 +142,58 @@ def load_geojson(file_id):
 mx_geojson = load_geojson(GEOJSON_FILE_ID)
 
 # --- 3. FOCO GEOGRÁFICO ACCIONABLE (MAPA INTERACTIVO) ---
+
 st.header("2. Foco de Intervención Geográfica (Mapa de Riesgo Dominante)")
 
-if df_final is not None and mx_geojson is not None:
+try:
+    if df_final is not None and mx_geojson is not None:
     
-    # 1. Calcular el CLUSTER DOMINANTE por estado
-    # Calcula la moda (el cluster más frecuente) por cada entidad de residencia
-    df_mapa = df_final.groupby('ent_resid')['cluster'].agg(lambda x: x.mode()[0]).reset_index()
-    df_mapa.rename(columns={'ent_resid': 'CVE_ENT', 'cluster': 'Cluster Dominante'}, inplace=True)
+        # 1. Calcular el CLUSTER DOMINANTE por estado
+        # Calcula la moda (el cluster más frecuente) por cada entidad de residencia
+        df_mapa = df_final.groupby('ent_resid')['cluster'].agg(lambda x: x.mode()[0]).reset_index()
+        df_mapa.rename(columns={'ent_resid': 'CVE_ENT', 'cluster': 'Cluster Dominante'}, inplace=True)
     
-    # Mapear el número de cluster a su nombre interpretativo
-    nombres_perfil = {
-        0: "0. Joven Inactivo (Desempleo)",
-        1: "1. Adulto Mayor Ocupado",
-        2: "2. Adulto Joven Ocupado (Foco)",
-        3: "3. Riesgo Desconocido (Madrugada)"
-    }
-    df_mapa['Perfil Dominante'] = df_mapa['Cluster Dominante'].map(nombres_perfil)
+        # Mapear el número de cluster a su nombre interpretativo
+        nombres_perfil = {
+            0: "0. Joven Inactivo (Desempleo)",
+            1: "1. Adulto Mayor Ocupado",
+            2: "2. Adulto Joven Ocupado (Foco)",
+            3: "3. Riesgo Desconocido (Madrugada)"
+            }
+        df_mapa['Perfil Dominante'] = df_mapa['Cluster Dominante'].map(nombres_perfil)
     
-    # 2. Creación del Mapa (Choropleth)
-    fig = px.choropleth(
-        df_mapa, 
-        geojson=mx_geojson, 
-        locations='CVE_ENT', 
-        color='Perfil Dominante',
-        featureidkey='properties.CVE_ENT', # CRÍTICO: Debe ser el campo en tu GeoJSON
-        projection="mercator",
-        color_discrete_map={
-            '0. Joven Inactivo (Desempleo)': 'yellow',
-            '1. Adulto Mayor Ocupado': 'green',
-            '2. Adulto Joven Ocupado (Foco)': 'red', # Resaltar el cluster más grande
-            '3. Riesgo Desconocido (Madrugada)': 'purple'
-        }
-    )
-    
-    # Configuración de mapa (centrado en México)
-    fig.update_geos(fitbounds="locations", visible=False)
-    fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
-    
-    # 3. Mostrar el mapa interactivo
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption("Cada estado está coloreado por el Perfil de Riesgo (Cluster) que es estadísticamente dominante en esa entidad.")
-    
+        # 2. Creación del Mapa (Choropleth)
+        fig = px.choropleth(
+            df_mapa, 
+            geojson=mx_geojson, 
+            locations='CVE_ENT', 
+            color='Perfil Dominante',
+            featureidkey='properties.CVE_ENT', # CRÍTICO: Debe ser el campo en tu GeoJSON
+            projection="mercator",
+            color_discrete_map={
+                '0. Joven Inactivo (Desempleo)': 'yellow',
+                '1. Adulto Mayor Ocupado': 'green',
+                '2. Adulto Joven Ocupado (Foco)': 'red', # Resaltar el cluster más grande
+                '3. Riesgo Desconocido (Madrugada)': 'purple'
+            }
+        )
+        
+        # Configuración de mapa (centrado en México)
+        fig.update_geos(fitbounds="locations", visible=False)
+        fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
+        
+        # 3. Mostrar el mapa interactivo
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Cada estado está coloreado por el Perfil de Riesgo (Cluster) que es estadísticamente dominante en esa entidad.")
+    elif df_final is None:
+         st.warning("No se pudo cargar el DataFrame final.")
+    elif mx_geojson is None:
+         st.warning("El GeoJSON no se pudo cargar de Drive. Revisa los logs de gdown.")
+         
+except Exception as e:
+    st.error(f"Error al generar el mapa (revisa claves geográficas): {e}")
+
+st.markdown("---")
     # 4. Sección Interactiva para la Distribución (Mantiene tu selector)
     st.subheader("Análisis Detallado por Entidad")
     # ... (Aquí va tu código anterior del st.selectbox para ver la distribución de clusters por estado)
@@ -188,6 +201,7 @@ if df_final is not None and mx_geojson is not None:
     
 else:
     st.warning("Advertencia: No se pueden mostrar los datos geográficos. Verifica que los archivos y columnas estén presentes.")
+
 
 
 
