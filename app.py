@@ -1,14 +1,3 @@
-¡Excelente! Ahora sí podemos hacer la corrección definitiva para eliminar el error de duplicidad y el error de tiempo de espera (EOF) causado por la doble carga.
-
-El problema en el código que enviaste es que la función load_data está definida dos veces, y Streamlit se detiene al ver esta duplicación antes de que la aplicación siquiera empiece a dibujar.
-
-He tomado tu código, eliminé las secciones duplicadas, aseguré que las funciones de carga solo usen gdown (ya que es la única manera de que los archivos grandes funcionen) y mantuve todos tus placeholders y lógica de visualización.
-
-Reemplaza el contenido completo de tu app.py con este código corregido y limpio.
-
-Código app.py Estabilizado (Versión Final)
-Python
-
 import streamlit as st
 import pandas as pd
 import numpy as np
