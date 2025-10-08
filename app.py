@@ -11,9 +11,43 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 
 # --- VARIABLES Y ARCHIVOS ---
 K_OPTIMO = 4 
-DF_PATH = 'datos_agrupados.parquet' # Nombre del archivo principal en GitHub
+#DF_PATH = 'datos_agrupados.parquet' # Nombre del archivo principal en GitHub
 PERFILES_PATH = 'perfiles.csv'     # Nombre del archivo de perfiles en GitHub
 TSNE_PATH = '13.tsne.PNG'          # Nombre del archivo de imagen en GitHub
+
+# ID del archivo PARQUET en Google Drive
+DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
+
+# --- FUNCIÓN DE CARGA CACHEADA (Para velocidad y GDrive) ---
+@st.cache_data
+def load_data(file_id):
+    # Nombre temporal para el archivo .parquet
+    output_path_df = "temp_df.parquet"
+    
+    with st.spinner('Cargando datos principales desde Google Drive...'):
+        try:
+            # 1. DESCARGA DEL DATAFRAME PRINCIPAL
+            gdown.download(id=file_id, output=output_path_df, quiet=True, fuzzy=True)
+            
+            # 2. CARGA LOCAL
+            df = pd.read_parquet(output_path_df)
+            
+            # 3. Limpieza y Verificación
+            df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
+            if 'cluster' not in df.columns or 'ent_resid' not in df.columns:
+                st.error("Error: El archivo PARQUET no tiene las columnas 'cluster' o 'ent_resid'.")
+                return None
+            
+            # Limpiar el archivo temporal
+            os.remove(output_path_df)
+            return df
+            
+        except Exception as e:
+            st.error(f"Error fatal al cargar o descargar el DataFrame principal: {e}")
+            return None
+
+# Llama a la función usando la ID en lugar de la ruta local
+df_final = load_data(DF_FILE_ID)
 
 # ID de Google Drive para el GeoJSON
 GEOJSON_FILE_ID = '1mTqwYwgobCnZpdezVfLAxVyHYbV3DQDN'
@@ -164,3 +198,4 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True)
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
