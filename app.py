@@ -104,7 +104,6 @@ try:
             locations='CVE_ENT', 
             color='Porcentaje Cluster 2', 
             color_continuous_scale="Reds", 
-            range_color=(0, df_mapa['Porcentaje Cluster 2'].max()),
             featureidkey='properties.CVE_ENT', # <--- REVISA ESTA CLAVE en tu GeoJSON de 6MB
             projection="mercator",
             labels={'Porcentaje Cluster 2':'% Cluster 2'}
@@ -150,4 +149,5 @@ try:
     st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
 except FileNotFoundError:
     st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
