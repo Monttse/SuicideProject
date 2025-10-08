@@ -104,7 +104,7 @@ except FileNotFoundError:
 
 # ... (resto de tu código de app.py)
 
-GEOJSON_PATH = 'mx_estados.geojson' # Asegúrate que este nombre es correcto
+GEOJSON_PATH = 'mexico.json' # Asegúrate que este nombre es correcto
 # ... (carga de datos)
 
 # --- FUNCIÓN DE CARGA CACHEADA para GeoJSON ---
@@ -169,6 +169,7 @@ if df_final is not None and mx_geojson is not None:
     
 else:
     st.warning("Advertencia: No se pueden mostrar los datos geográficos. Verifica que los archivos y columnas estén presentes.")
+
 
 
 
