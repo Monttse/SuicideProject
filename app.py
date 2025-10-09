@@ -160,7 +160,7 @@ try:
     
     # Intenta usar el nombre correcto. Si falla, usa 'tamano_temp' o el que exista.
     try:
-        subset_col = 'Tamaño del Cluster' 
+        subset_col = 'Tamaño' 
         df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col])
     except KeyError:
         # Fallback si el nombre 'Tamaño del Cluster' no está en el CSV
@@ -338,3 +338,4 @@ else:
     st.warning("No se pudo cargar la visualización 3D. Asegúrate de generar y subir 'tsne_3d_data.json'.")
 
 st.markdown("---")
+
