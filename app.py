@@ -8,61 +8,16 @@ import os
 import pydeck as pdk
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Perfiles de Riesgo de Suicidio México", layout="wide")
+st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide")
 
 # --- VARIABLES Y ARCHIVOS ---
-K_OPTIMO = 5 # 
-PERFILES_PATH = 'perfiles.csv'
-TSNE_PATH = '13.tsne.PNG'        
+K_OPTIMO = 5 
+PERFILES_PATH = 'perfiles.csv'       
+TSNE_DATA_PATH = 'tsne_3d_data.json' # Nuevo archivo de datos 3D
+GEOJSON_PATH = 'mexico.json'
+DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' # ID de Google Drive para el DataFrame principal
 
-# RUTA LOCAL EN GITHUB
-GEOJSON_PATH = 'mexico.json' 
-
-# ID DE GOOGLE DRIVE para el DataFrame principal
-DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' 
-
-# -----------------------------------------------------------
-# --- FUNCIONES DE CARGA DE DATOS ---
-# -----------------------------------------------------------
-
-@st.cache_data
-def load_geojson(path):
-    """Carga el GeoJSON simplificado directamente desde el repositorio."""
-    try:
-        with open(path, encoding='utf-8') as f:
-            data = json.load(f)
-        return data
-        
-    except Exception as e:
-        # Aquí se mostrará el error si el JSON está mal
-        st.error(f"Error fatal al cargar GeoJSON desde GitHub: {e}") 
-        return None
-
-@st.cache_data
-def load_data(file_id):
-    """Descarga y carga el DataFrame principal usando gdown."""
-    output_path_df = "temp_df.parquet"
-    
-    with st.spinner('Cargando datos principales desde Google Drive...'):
-        try:
-            gdown.download(id=file_id, output=output_path_df, quiet=True, fuzzy=True)
-            df = pd.read_parquet(output_path_df)
-            df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
-            os.remove(output_path_df)
-            return df
-        except Exception as e:
-            st.error(f"Error fatal al cargar el DataFrame principal: {e}")
-            return None
-
-# --- LLAMADA INICIAL DE DATOS ---
-df_final = load_data(DF_FILE_ID)
-
-
-# ====================================================================
-# --- COMIENZA LA INTERFAZ (UI) ---
-# ====================================================================
-# --- Mapeo de Nombres de Estado y Clusters ---
-
+# --- MAPEOS ---
 ESTADO_NOMBRES = {
     '01': 'Aguascalientes', '02': 'Baja California', '03': 'Baja California Sur', 
     '04': 'Campeche', '05': 'Coahuila', '06': 'Colima', '07': 'Chiapas', 
@@ -75,7 +30,9 @@ ESTADO_NOMBRES = {
     '32': 'Zacatecas'
 }
 
-MES_NOMBRES = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+MES_NOMBRES = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 
+               8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
 
 CLUSTER_NOMBRES = {
     0: 'Adulto Joven - riesgo nocturno',
@@ -85,45 +42,156 @@ CLUSTER_NOMBRES = {
     4: 'Adulto Mayor - analfabetismo' 
 }
 
+CLUSTER_DESCRIPCIONES = {
+    0: 'Adulto promedio (32 años), ocupado, con riesgo concentrado en la **madrugada** (00-05).',
+    1: 'Adulto promedio (32 años), ocupado, con alto riesgo en la **noche** (18-23) al finalizar la jornada.',
+    2: 'Adulto promedio (30 años), con gran cantidad de datos **no especificados**, y riesgo en la madrugada (00-05).',
+    3: '**Joven** (22 años), **desempleado** o inactivo. El foco principal de riesgo, concentrado en la **noche** (18-23).',
+    4: '**Adulto mayor** (60 años), ocupado, con riesgo concentrado en la **tarde** (12-17).'
+}
+
+
+# -----------------------------------------------------------
+# --- FUNCIONES DE CARGA DE DATOS ---
+# -----------------------------------------------------------
+
+@st.cache_data
+def load_geojson(path):
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        st.error(f"Error fatal al cargar GeoJSON desde GitHub: {e}") 
+        return None
+
+@st.cache_data
+def load_data(file_id):
+    output_path_df = "temp_df.parquet"
+    with st.spinner('Cargando datos principales desde Google Drive...'):
+        try:
+            gdown.download(id=file_id, output=output_path_df, quiet=True, fuzzy=True)
+            df = pd.read_parquet(output_path_df)
+            df['ent_resid'] = df['ent_resid'].astype(str).str.zfill(2) 
+            os.remove(output_path_df)
+            return df
+        except Exception as e:
+            st.error(f"Error fatal al cargar el DataFrame principal: {e}")
+            return None
+
+@st.cache_data
+def load_tsne_data(path):
+    try:
+        df = pd.read_json(path, orient='records')
+        return df
+    except FileNotFoundError:
+        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path}.")
+        return None
+    except Exception as e:
+        st.error(f"Error al cargar datos t-SNE 3D: {e}")
+        return None
+
+# --- LLAMADA INICIAL DE DATOS ---
+df_final = load_data(DF_FILE_ID)
+df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
+
+
+# ====================================================================
+# --- COMIENZA LA INTERFAZ (UI) ---
+# ====================================================================
+
 st.title("Sistema de Identificación de Perfiles de Riesgo de Suicidio (2020-2023)")
 st.subheader("Modelado no Supervisado (K-Means) en Casos de Suicidio en México")
 st.markdown("---")
 
-# --- SECCIÓN 1: PERFILES DE RIESGO ---
-st.header("1. Perfiles de Riesgo de Suicidio (K=5)")
-st.markdown("Tabla resumen que describe las características principales de cada grupo (moda para categóricas, media para edad).")
+# --------------------------------------------------------------------------------
+# --- SECCIÓN 1: VISUALIZACIONES DESCRIPTIVAS (NUEVA POSICIÓN) ---
+# --------------------------------------------------------------------------------
+st.header("1. Visualizaciones Descriptivas Clave")
+st.markdown("Gráficas que contextualizan las características generales de la población de estudio (2020-2023).")
+
+col1, col2, col3 = st.columns(3)
+
+# GRÁFICA 1: Defunciones Totales
+with col1:
+    st.subheader("Distribución Mensual")
+    try:
+        st.image('01.Dist_defunciones.PNG', use_container_width=True)
+        st.caption("Distribución de los casos, mostrando la estacionalidad (ej. picos en Marzo y Septiembre).")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 01.Dist_defunciones.PNG")
+
+# GRÁFICA 2: Edad y Género
+with col2:
+    st.subheader("Distribución por Edad y Género")
+    try:
+        st.image('03.Dist_edad_genero_suicide.PNG', use_container_width=True)
+        st.caption("Comparativa por grupos de edad, resaltando la mayor vulnerabilidad en el género masculino joven.")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 03.Dist_edad_genero_suicide.PNG")
+
+# GRÁFICA 3: Nivel Educativo
+with col3:
+    st.subheader("Distribución por Nivel Educativo")
+    try:
+        st.image('10.Dist_nivel_educativo_suicide.PNG', use_container_width=True)
+        st.caption("Concentración de casos por el nivel educativo formal alcanzado (Primaria, Secundaria, etc.).")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 10.Dist_nivel_educativo_suicide.PNG")
+
+st.markdown("---")
+
+
+# --------------------------------------------------------------------------------
+# --- SECCIÓN 2: PERFILES DE RIESGO (TABLA) ---
+# --------------------------------------------------------------------------------
+st.header("2. Perfiles de Riesgo de Suicidio (K=5)")
+st.markdown("Tabla resumen que describe las características principales de cada grupo.")
 
 try:
     df_perfiles = pd.read_csv(PERFILES_PATH)
     
-    # 1. Mapeo del número de Mes a Nombre para la visualización
+    # 1. Mapeo y Renombre
     if 'Mes Frecuente' in df_perfiles.columns:
         df_perfiles['Mes Frecuente'] = df_perfiles['Mes Frecuente'].map(MES_NOMBRES)
 
-    # 2. Reemplazar IDs de Cluster por los nombres descriptivos
-    # Esto es crucial para la leyenda
     df_perfiles['cluster'] = df_perfiles['cluster'].map(CLUSTER_NOMBRES)
     df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
+    
+    # Intenta usar el nombre correcto. Si falla, usa 'tamano_temp' o el que exista.
+    try:
+        subset_col = 'Tamaño del Cluster' 
+        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col])
+    except KeyError:
+        # Fallback si el nombre 'Tamaño del Cluster' no está en el CSV
+        subset_col = 'Tamaño' 
+
 
     st.dataframe(
-        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño']),
+        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col]),
         hide_index=True,
         use_container_width=True
     )
     st.caption("Los 5 perfiles identificados por K-Means. El tamaño indica la cantidad de casos en cada grupo.")
 except FileNotFoundError:
     st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
+except Exception as e:
+    st.error(f"Error al mostrar la tabla de perfiles: {e}")
+    
 st.markdown("---")
 
-# --- SECCIÓN 2: MAPA Y ANÁLISIS GEOGRÁFICO
-st.header("2. Foco de Intervención Geográfica")
+
+# --------------------------------------------------------------------------------
+# --- SECCIÓN 3: MAPA Y ANÁLISIS GEOGRÁFICO ---
+# --------------------------------------------------------------------------------
+st.header("3. Foco de Intervención Geográfica")
 
 try:
     mx_geojson = load_geojson(GEOJSON_PATH) 
 
     if df_final is not None and mx_geojson is not None:
         
-        # --- NUEVO SELECTOR DE CLUSTER PARA EL MAPA ---
+        # --- SELECTOR DE CLUSTER PARA EL MAPA ---
         st.subheader("Selección de Perfil de Riesgo")
         
         cluster_seleccionado_id = st.selectbox(
@@ -134,10 +202,12 @@ try:
         
         cluster_seleccionado_nombre = CLUSTER_NOMBRES[cluster_seleccionado_id]
         
+        # --- DESCRIPCIÓN DEL CLUSTER (Añadido) ---
+        st.info(f"**Descripción del Perfil {cluster_seleccionado_id}:** {CLUSTER_DESCRIPCIONES[cluster_seleccionado_id]}")
+        
         st.subheader(f"Mapa de Concentración del Perfil: {cluster_seleccionado_nombre}")
         
-        # --- 1. PREPARACIÓN DE DATOS (DataFrame) ---
-        # La lógica usa el cluster seleccionado
+        # --- LÓGICA DEL MAPA (SIN CAMBIOS) ---
         df_conteo_total = df_final.groupby('ent_resid').size().reset_index(name='Total Casos')
         df_conteo_cluster = df_final[df_final['cluster'] == cluster_seleccionado_id].groupby('ent_resid').size().reset_index(name='Casos Cluster')
         
@@ -145,40 +215,30 @@ try:
         df_mapa['Porcentaje Cluster'] = (df_mapa['Casos Cluster'] / df_mapa['Total Casos']) * 100
         df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
         
-        # Escala de color
         max_porcentaje = df_mapa['Porcentaje Cluster'].max()
-        # Se usa un color diferente para cada cluster para mayor contraste (ej. Cluster 0 = Azul, Cluster 1 = Verde, etc.)
         df_mapa['color_intensity'] = (df_mapa['Porcentaje Cluster'] / max_porcentaje * 255).astype(int)
 
-        # Mapeo de colores RGB basado en el Cluster ID
-        if cluster_seleccionado_id == 0: # Joven Inactivo -> Azul
-            color_formula = "[0, 0, properties.color_intensity, 160]"
-        elif cluster_seleccionado_id == 1: # Adulto Mayor -> Verde
-            color_formula = "[0, properties.color_intensity, 0, 160]"
-        elif cluster_seleccionado_id == 2: # Adulto Joven (Foco) -> Rojo
-            color_formula = "[properties.color_intensity, 0, 0, 160]"
-        else: # Riesgo Desconocido -> Amarillo/Blanco
-            color_formula = "[properties.color_intensity, properties.color_intensity, 0, 160]"
+        # Mapeo de colores RGB basado en el Cluster ID (Ajustado a 5 clusters)
+        if cluster_seleccionado_id == 0: color_formula = "[0, 0, properties.color_intensity, 160]" # Azul
+        elif cluster_seleccionado_id == 1: color_formula = "[0, properties.color_intensity, 0, 160]" # Verde
+        elif cluster_seleccionado_id == 2: color_formula = "[properties.color_intensity, properties.color_intensity, 0, 160]" # Amarillo
+        elif cluster_seleccionado_id == 3: color_formula = "[properties.color_intensity, 0, 0, 160]" # Rojo (Foco)
+        else: color_formula = "[255, 0, properties.color_intensity, 160]" # Magenta (Cluster 4)
 
 
-        # --- 2. FUSIÓN DE DATOS EN EL GEOJSON (Pydeck) ---
+        # --- FUSIÓN DE DATOS EN EL GEOJSON Y PYDECK (SIN CAMBIOS) ---
         color_lookup = df_mapa.set_index('CVE_ENT')['color_intensity'].to_dict()
-        
-        # Crear una copia para evitar modificar el objeto cacheado
         geojson_data = json.loads(json.dumps(mx_geojson)) 
         
         for feature in geojson_data['features']:
-            # La clave del GeoJSON debe coincidir con el DF ('01', '02', etc.)
             entidad_id = feature['properties']['CVE_ENT'] 
             color_value = color_lookup.get(entidad_id, 0) 
             feature['properties']['color_intensity'] = color_value
             
-        # --- 3. CREACIÓN DEL MAPA CON PYDECK ---
-        
         geojson_layer = pdk.Layer(
             "GeoJsonLayer",
             geojson_data,
-            get_fill_color=color_formula, # Usa la fórmula de color definida
+            get_fill_color=color_formula, 
             get_line_color=[0, 0, 0], 
             line_width_min_pixels=1,
             pickable=True,
@@ -187,10 +247,7 @@ try:
         view_state = pdk.ViewState(
             latitude=23.6345,
             longitude=-102.5528,
-            zoom=4.5,
-            min_zoom=4,
-            max_zoom=10,
-            pitch=0,
+            zoom=4.5, min_zoom=4, max_zoom=10, pitch=0,
         )
 
         st.pydeck_chart(pdk.Deck(
@@ -202,7 +259,7 @@ try:
         st.caption(f"El color en el mapa indica la concentración porcentual del Perfil {cluster_seleccionado_id} ({cluster_seleccionado_nombre}) por entidad.")
         st.markdown("---")
         
-        # --- 4. ANÁLISIS DETALLADO (SELECTOR DE ESTADO CON NOMBRES) ---
+        # --- ANÁLISIS DETALLADO POR ENTIDAD (Gráfico Plotly) ---
         st.subheader("Análisis Detallado por Entidad")
         
         lista_codigos = sorted(df_final['ent_resid'].unique().tolist())
@@ -210,97 +267,74 @@ try:
         entidad_seleccionada_codigo = st.selectbox(
             'Selecciona una Entidad de Residencia:',
             options=lista_codigos,
-            # La función de formato usa el diccionario de nombres
             format_func=lambda codigo: f"{ESTADO_NOMBRES.get(codigo, f'Entidad {codigo}')}"  
         )
-        
-        # >> FIX: DEFINIMOS nombre_estado AQUÍ (Línea crítica para solucionar el error) <<
+        # Definición de nombre_estado antes de usarse
         nombre_estado = ESTADO_NOMBRES.get(entidad_seleccionada_codigo, f'Entidad {entidad_seleccionada_codigo}')
-        
+
         df_filtrado = df_final[df_final['ent_resid'] == entidad_seleccionada_codigo]
         distribucion_cluster = df_filtrado['cluster'].value_counts(normalize=True).mul(100).sort_index()
-        
-        # 1. Asignar nombres a los clusters para el eje X
+
         distribucion_cluster.index = distribucion_cluster.index.map(CLUSTER_NOMBRES)
-        
-        # 2. Crear la gráfica de barras con Plotly Express (Control de Eje X y Color)
+
+        # Gráfico Plotly
         fig_bar = px.bar(
             distribucion_cluster,
-            y=distribucion_cluster.values, # Valores de Porcentaje
-            x=distribucion_cluster.index,  # Nombres de Cluster
+            y=distribucion_cluster.values, 
+            x=distribucion_cluster.index,
             labels={'y': 'Porcentaje de Casos (%)', 'x': 'Perfil de Riesgo'},
             title=f"Distribución de Perfiles en {nombre_estado}",
-            color_discrete_sequence=['#CC0000'] # Color Rojo oscuro uniforme
+            color_discrete_sequence=['#CC0000'] 
         )
         
-        # Asegura el orden correcto de los clusters en el eje X
         fig_bar.update_layout(xaxis={'categoryorder':'array', 'categoryarray': list(CLUSTER_NOMBRES.values())})
         
         st.plotly_chart(fig_bar, use_container_width=True)
-        
+
         st.caption(f"Distribución porcentual de los 5 perfiles en {nombre_estado}.")
+
 
     elif df_final is None:
          st.error("No se pudo cargar el DataFrame principal.")
     elif mx_geojson is None:
-         st.error("Error al cargar el GeoJSON. Asegúrate que el archivo esté en GitHub y se llame 'mexico.json'.")
+         st.error("Error al cargar el GeoJSON.")
          
 except Exception as e:
     st.error(f"Error crítico al generar la sección geográfica: {e}")
     
 st.markdown("---")
 
-# --- SECCIÓN 3: VALIDACIÓN DEL MODELO (t-SNE) ---
-st.header("3. Visualizaciones Descriptivas Clave")
-st.markdown("Gráficas que contextualizan las características generales de la población de estudio (2020-2023).")
 
-# Crear 3 columnas para imágenes más pequeñas
-col1, col2, col3 = st.columns(3)
+# --------------------------------------------------------------------------------
+# --- SECCIÓN 4: VALIDACIÓN DEL MODELO (t-SNE 3D INTERACTIVO) ---
+# --------------------------------------------------------------------------------
+st.header("4. Validación del Modelo (t-SNE 3D)")
 
-# GRÁFICA 1: Defunciones Totales
-with col1:
-    st.subheader("01. Defunciones por Mes")
-    try:
-        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
-        st.image('01.Dist_defunciones.PNG', use_container_width=True)
-        st.caption("Distribución de los casos, mostrando la estacionalidad (ej. picos en Marzo y Septiembre).")
-    except FileNotFoundError:
-        st.warning("No se encontró la imagen: 01.Dist_defunciones.PNG")
+if df_tsne_3d is not None:
+    # --- CÓDIGO PARA GENERAR PLOTLY 3D ---
+    fig_3d = px.scatter_3d(
+        df_tsne_3d,
+        x='Componente_1',
+        y='Componente_2',
+        z='Componente_3',
+        color='cluster_nombre', # Usamos los nombres para el color
+        symbol='cluster_nombre',
+        hover_data=['cluster_nombre'],
+        title='Visualización de Clusters con t-SNE (3D)',
+    )
 
-# GRÁFICA 2: Edad y Género
-with col2:
-    st.subheader("03. Distribución por Edad y Género")
-    try:
-        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
-        st.image('03.Dist_edad_genero_suicide.PNG', use_container_width=True)
-        st.caption("Comparativa por grupos de edad, resaltando la mayor vulnerabilidad en el género masculino joven.")
-    except FileNotFoundError:
-        st.warning("No se encontró la imagen: 03.Dist_edad_genero_suicide.PNG")
+    # Ajuste de tamaño decente (altura de 700px)
+    fig_3d.update_layout(
+        height=700,
+        width=1000, # El use_container_width lo ajustará
+        legend_title_text='Perfil de Riesgo'
+    )
 
-# GRÁFICA 3: Nivel Educativo
-with col3:
-    st.subheader("10. Distribución por Nivel Educativo")
-    try:
-        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
-        st.image('10.Dist_nivel_educativo_suicide.PNG', use_container_width=True)
-        st.caption("Concentración de casos por el nivel educativo formal alcanzado (Primaria, Secundaria, etc.).")
-    except FileNotFoundError:
-        st.warning("No se encontró la imagen: 10.Dist_nivel_educativo_suicide.PNG")
+    # Mostrar el gráfico interactivo
+    st.plotly_chart(fig_3d, use_container_width=True) 
+    st.caption("Gráfico interactivo de t-SNE que valida la separación clara de los 5 perfiles.")
+    
+else:
+    st.warning("No se pudo cargar la visualización 3D. Asegúrate de generar y subir 'tsne_3d_data.json'.")
 
 st.markdown("---")
-
-# --- SECCIÓN 4: T-SNE 2D/3D (Usando el archivo 13.tsne.PNG por ahora) ---
-st.header("4. Validación del Modelo (t-SNE)")
-
-try:
-    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE (K=5).", use_container_width=True)
-    st.caption("La clara separación de los 5 colores valida la elección de K=5 como número óptimo.")
-except FileNotFoundError:
-    st.warning(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
-
-
-
-
-
-
-
