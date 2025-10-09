@@ -1,0 +1,6 @@
+cluster,Edad promedio,sexo,edo_civil,escolaridad,asist_medica,ocupacion_agrup,metodo,sitio,lugar,ciclo_horario,Mes ocurrencia,Tamaño,Nombre del Perfil
+0,32.71160474913826,Hombre,Soltero,Media Superior,Sin Asistencia,Trabaja,Ahorcamiento,No_especificado,Otro lugar,Madrugada (00-05),Jul,5222,Adulto Joven - riesgo nocturno
+1,32.232392936878426,Hombre,Soltero,Media Superior,Sin Asistencia,Trabaja,Ahorcamiento,Hogar,Vivienda,Noche (18-23),Jun,9854,Adulto Joven - riesgo vespertino
+2,30.990787269681743,Hombre,Soltero,Media Superior,NE,No_especificado,Ahorcamiento,Hogar,Vivienda,Madrugada (00-05),Sep,4776,Adulto Joven - riesgo no especificado
+3,22.6850136239782,Hombre,Soltero,Media Superior,Sin Asistencia,No_trabaja,Ahorcamiento,Hogar,Vivienda,Noche (18-23),Mar,7340,Adulto Joven - sin ocupación
+4,60.47968992248062,Hombre,Casado,Básica,Sin Asistencia,Trabaja,Ahorcamiento,Hogar,Vivienda,Tarde (12-17),May,6450,Adulto Mayor - analfabetismo
