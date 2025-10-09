@@ -106,7 +106,7 @@ try:
     df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
 
     st.dataframe(
-        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño del Cluster']),
+        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño']),
         hide_index=True,
         use_container_width=True
     )
@@ -298,6 +298,7 @@ try:
     st.caption("La clara separación de los 5 colores valida la elección de K=5 como número óptimo.")
 except FileNotFoundError:
     st.warning(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
 
 
