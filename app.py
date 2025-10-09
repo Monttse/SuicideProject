@@ -204,42 +204,41 @@ try:
         
         # --- 4. ANÁLISIS DETALLADO (SELECTOR DE ESTADO CON NOMBRES) ---
         st.subheader("Análisis Detallado por Entidad")
-        
-        lista_codigos = sorted(df_final['ent_resid'].unique().tolist())
-        
-        # CORRECCIÓN: El selector ahora usa el nombre del estado
-        entidad_seleccionada_codigo = st.selectbox(
-            'Selecciona una Entidad de Residencia:',
-            options=lista_codigos,
-            # La función de formato usa el diccionario de nombres
-            format_func=lambda codigo: f"{ESTADO_NOMBRES.get(codigo, f'Entidad {codigo}')}" 
-        )
 
-        df_filtrado = df_final[df_final['ent_resid'] == entidad_seleccionada_codigo]
-        
-        # Filtrar solo los clusters existentes (0 a 4)
-        distribucion_cluster = df_filtrado['cluster'].value_counts(normalize=True).mul(100).sort_index()
-        
-        # 1. Asignar nombres a los clusters para el eje X
-        distribucion_cluster.index = distribucion_cluster.index.map(CLUSTER_NOMBRES)
+lista_codigos = sorted(df_final['ent_resid'].unique().tolist())
+    
+entidad_seleccionada_codigo = st.selectbox(
+    'Selecciona una Entidad de Residencia:',
+    options=lista_codigos,
+    # La función de formato usa el diccionario de nombres
+    format_func=lambda codigo: f"{ESTADO_NOMBRES.get(codigo, f'Entidad {codigo}')}"  
+)
 
-        # 2. Crear la gráfica de barras con Plotly Express (Control de Eje X y Color)
-        fig_bar = px.bar(
-            distribucion_cluster,
-            y=distribucion_cluster.values, # Valores de Porcentaje
-            x=distribucion_cluster.index,  # Nombres de Cluster
-            labels={'y': 'Porcentaje de Casos (%)', 'x': 'Perfil de Riesgo'},
-            title=f"Distribución de Perfiles en {nombre_estado}",
-            color_discrete_sequence=['#CC0000'] # Color Rojo oscuro uniforme
-        )
-        
-        # Asegura el orden correcto de los clusters en el eje X
-        fig_bar.update_layout(xaxis={'categoryorder':'array', 'categoryarray': list(CLUSTER_NOMBRES.values())})
-        
-        st.plotly_chart(fig_bar, use_container_width=True)
+# >> FIX: DEFINIMOS nombre_estado AQUÍ (Línea crítica para solucionar el error) <<
+nombre_estado = ESTADO_NOMBRES.get(entidad_seleccionada_codigo, f'Entidad {entidad_seleccionada_codigo}')
 
-        nombre_estado = ESTADO_NOMBRES.get(entidad_seleccionada_codigo, f'Entidad {entidad_seleccionada_codigo}')
-        st.caption(f"Distribución porcentual de los 5 perfiles en {nombre_estado}.")
+df_filtrado = df_final[df_final['ent_resid'] == entidad_seleccionada_codigo]
+distribucion_cluster = df_filtrado['cluster'].value_counts(normalize=True).mul(100).sort_index()
+
+# 1. Asignar nombres a los clusters para el eje X
+distribucion_cluster.index = distribucion_cluster.index.map(CLUSTER_NOMBRES)
+
+# 2. Crear la gráfica de barras con Plotly Express (Control de Eje X y Color)
+fig_bar = px.bar(
+    distribucion_cluster,
+    y=distribucion_cluster.values, # Valores de Porcentaje
+    x=distribucion_cluster.index,  # Nombres de Cluster
+    labels={'y': 'Porcentaje de Casos (%)', 'x': 'Perfil de Riesgo'},
+    title=f"Distribución de Perfiles en {nombre_estado}",
+    color_discrete_sequence=['#CC0000'] # Color Rojo oscuro uniforme
+)
+
+# Asegura el orden correcto de los clusters en el eje X
+fig_bar.update_layout(xaxis={'categoryorder':'array', 'categoryarray': list(CLUSTER_NOMBRES.values())})
+
+st.plotly_chart(fig_bar, use_container_width=True)
+
+st.caption(f"Distribución porcentual de los 5 perfiles en {nombre_estado}.")
 
     elif df_final is None:
          st.error("No se pudo cargar el DataFrame principal.")
@@ -298,6 +297,7 @@ try:
     st.caption("La clara separación de los 5 colores valida la elección de K=5 como número óptimo.")
 except FileNotFoundError:
     st.warning(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
+
 
 
 
