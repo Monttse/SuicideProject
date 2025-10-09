@@ -11,9 +11,10 @@ import pydeck as pdk
 st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide")
 
 # --- VARIABLES Y ARCHIVOS ---
-K_OPTIMO = 5 
+K_OPTIMO = 5
 PERFILES_PATH = 'perfiles.csv'       
-TSNE_DATA_PATH = 'tsne_3d_data.json' # Nuevo archivo de datos 3D
+# Cambiamos la ruta a CSV para mayor estabilidad
+TSNE_DATA_PATH = 'tsne_3d_data.csv' 
 GEOJSON_PATH = 'mexico.json'
 DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' # ID de Google Drive para el DataFrame principal
 
@@ -32,7 +33,6 @@ ESTADO_NOMBRES = {
 
 MES_NOMBRES = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 
                8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
-
 
 CLUSTER_NOMBRES = {
     0: 'Adulto Joven - riesgo nocturno',
@@ -62,7 +62,7 @@ def load_geojson(path):
             data = json.load(f)
         return data
     except Exception as e:
-        st.error(f"Error fatal al cargar GeoJSON desde GitHub: {e}") 
+        st.error(f"Error fatal al cargar GeoJSON: {e}") 
         return None
 
 @st.cache_data
@@ -81,29 +81,31 @@ def load_data(file_id):
 
 @st.cache_data
 def load_tsne_data(path):
-    # Intentamos primero cargar como CSV, que es más simple
+    # CORRECCIÓN DE SINTAXIS: El bloque try/except ahora es correcto
     try:
-        df = pd.read_csv(path.replace('.json', '.csv'))
-        st.info("Cargando datos t-SNE desde archivo CSV.")
+        # Intentamos cargar el CSV (ruta preferida)
+        if path.endswith('.csv') and os.path.exists(path):
+            df = pd.read_csv(path)
+            st.info("Cargando datos t-SNE desde archivo CSV.")
         
-    except FileNotFoundError:
-        # Si no existe el CSV, intentamos cargarlo usando el módulo JSON nativo
-        if path.endswith('.json'):
+        # Si la ruta es .json y existe (por si acaso), usamos el módulo JSON nativo
+        elif path.endswith('.json') and os.path.exists(path):
             st.info("Cargando datos t-SNE desde archivo JSON (Módulo nativo).")
             with open(path, 'r') as f:
-                data = json.load(f) # Usa el módulo nativo 'json'
-            df = pd.DataFrame(data) # Crea el DataFrame a partir de la lista de diccionarios
+                data = json.load(f) 
+            df = pd.DataFrame(data) 
         else:
-            raise FileNotFoundError # Re-lanza el error si no es CSV ni JSON
+            raise FileNotFoundError # Si ninguno de los dos existe, lanzamos error
+            
 
-    # Post-Procesamiento (común a CSV o JSON)
-    if 'cluster_nombre' in df.columns:
-        df['cluster_nombre'] = df['cluster_nombre'].astype(str)
-    
-    return df
+        # Post-Procesamiento (común)
+        if 'cluster_nombre' in df.columns:
+            df['cluster_nombre'] = df['cluster_nombre'].astype(str)
+        
+        return df
     
     except FileNotFoundError:
-        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Asegúrate de que uno de los dos exista.")
+        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path}.")
         return None
     except Exception as e:
         st.error(f"Error al cargar datos t-SNE 3D: {e}")
@@ -111,9 +113,9 @@ def load_tsne_data(path):
 
 # --- LLAMADA INICIAL DE DATOS ---
 df_final = load_data(DF_FILE_ID)
-# Usaremos .json en la variable, pero la función intentará cargar el .csv si existe
-TSNE_DATA_PATH = 'tsne_3d_data.json' 
+# TSNE_DATA_PATH ya fue cambiado a 'tsne_3d_data.csv' arriba
 df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
+
 
 # ====================================================================
 # --- COMIENZA LA INTERFAZ (UI) ---
@@ -124,7 +126,7 @@ st.subheader("Modelado no Supervisado (K-Means) en Casos de Suicidio en México"
 st.markdown("---")
 
 # --------------------------------------------------------------------------------
-# --- SECCIÓN 1: VISUALIZACIONES DESCRIPTIVAS (NUEVA POSICIÓN) ---
+# --- SECCIÓN 1: VISUALIZACIONES DESCRIPTIVAS ---
 # --------------------------------------------------------------------------------
 st.header("1. Visualizaciones Descriptivas Clave")
 st.markdown("Gráficas que contextualizan las características generales de la población de estudio (2020-2023).")
@@ -171,27 +173,39 @@ try:
     df_perfiles = pd.read_csv(PERFILES_PATH)
     
     # 1. Mapeo y Renombre
-    if 'Mes Frecuente' in df_perfiles.columns:
-        df_perfiles['Mes Frecuente'] = df_perfiles['Mes Frecuente'].map(MES_NOMBRES)
+    if 'Mes ocurrencia' in df_perfiles.columns:
+        df_perfiles['Mes ocurrencia'] = df_perfiles['Mes ocurrencia'].map(MES_NOMBRES)
 
     df_perfiles['cluster'] = df_perfiles['cluster'].map(CLUSTER_NOMBRES)
     df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
     
-    # Intenta usar el nombre correcto. Si falla, usa 'tamano_temp' o el que exista.
-    try:
-        subset_col = 'Tamaño' 
-        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col])
-    except KeyError:
-        # Fallback si el nombre 'Tamaño del Cluster' no está en el CSV
-        subset_col = 'Tamaño' 
+    # FIX: Identificar el nombre de la columna de tamaño del cluster
+    subset_col = 'Tamaño' # Nombre final deseado
 
+    # Mapear el nombre original ('tamano_temp' o 'Tamaño') al nombre final
+    if 'tamano_temp' in df_perfiles.columns:
+        df_perfiles.rename(columns={'tamano_temp': subset_col}, inplace=True)
+    elif 'Tamaño' not in df_perfiles.columns:
+         # Usar el nombre que ya existe si 'tamano_temp' no está y 'Tamaño' no es el nombre
+         # Usaremos 'tamano' como fallback. Revisa tu CSV si esto falla.
+         if 'tamano' in df_perfiles.columns:
+              df_perfiles.rename(columns={'tamano': subset_col}, inplace=True)
+         else:
+              subset_col = None # No se encontró la columna de tamaño
 
-    st.dataframe(
-        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col]),
-        hide_index=True,
-        use_container_width=True
-    )
+    # 3. Mostrar la tabla con gradiente (usando el nombre asegurado)
+    if subset_col and subset_col in df_perfiles.columns:
+        st.dataframe(
+            df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col]),
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.dataframe(df_perfiles, hide_index=True, use_container_width=True)
+        st.warning("No se pudo aplicar el gradiente de color: la columna de tamaño no fue encontrada. Asegúrate de que se llama 'tamano_temp' o 'Tamaño' en el CSV.")
+
     st.caption("Los 5 perfiles identificados por K-Means. El tamaño indica la cantidad de casos en cada grupo.")
+
 except FileNotFoundError:
     st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
 except Exception as e:
@@ -221,12 +235,12 @@ try:
         
         cluster_seleccionado_nombre = CLUSTER_NOMBRES[cluster_seleccionado_id]
         
-        # --- DESCRIPCIÓN DEL CLUSTER (Añadido) ---
+        # --- DESCRIPCIÓN DEL CLUSTER ---
         st.info(f"**Descripción del Perfil {cluster_seleccionado_id}:** {CLUSTER_DESCRIPCIONES[cluster_seleccionado_id]}")
         
         st.subheader(f"Mapa de Concentración del Perfil: {cluster_seleccionado_nombre}")
         
-        # --- LÓGICA DEL MAPA (SIN CAMBIOS) ---
+        # --- LÓGICA DEL MAPA ---
         df_conteo_total = df_final.groupby('ent_resid').size().reset_index(name='Total Casos')
         df_conteo_cluster = df_final[df_final['cluster'] == cluster_seleccionado_id].groupby('ent_resid').size().reset_index(name='Casos Cluster')
         
@@ -237,15 +251,15 @@ try:
         max_porcentaje = df_mapa['Porcentaje Cluster'].max()
         df_mapa['color_intensity'] = (df_mapa['Porcentaje Cluster'] / max_porcentaje * 255).astype(int)
 
-        # Mapeo de colores RGB basado en el Cluster ID (Ajustado a 5 clusters)
-        if cluster_seleccionado_id == 0: color_formula = "[0, 0, properties.color_intensity, 160]" # Azul
-        elif cluster_seleccionado_id == 1: color_formula = "[0, properties.color_intensity, 0, 160]" # Verde
-        elif cluster_seleccionado_id == 2: color_formula = "[properties.color_intensity, properties.color_intensity, 0, 160]" # Amarillo
-        elif cluster_seleccionado_id == 3: color_formula = "[properties.color_intensity, 0, 0, 160]" # Rojo (Foco)
-        else: color_formula = "[255, 0, properties.color_intensity, 160]" # Magenta (Cluster 4)
+        # Mapeo de colores RGB basado en el Cluster ID
+        if cluster_seleccionado_id == 0: color_formula = "[0, 0, properties.color_intensity, 160]" 
+        elif cluster_seleccionado_id == 1: color_formula = "[0, properties.color_intensity, 0, 160]" 
+        elif cluster_seleccionado_id == 2: color_formula = "[properties.color_intensity, properties.color_intensity, 0, 160]" 
+        elif cluster_seleccionado_id == 3: color_formula = "[properties.color_intensity, 0, 0, 160]" 
+        else: color_formula = "[255, 0, properties.color_intensity, 160]" 
 
 
-        # --- FUSIÓN DE DATOS EN EL GEOJSON Y PYDECK (SIN CAMBIOS) ---
+        # --- FUSIÓN DE DATOS EN EL GEOJSON Y PYDECK ---
         color_lookup = df_mapa.set_index('CVE_ENT')['color_intensity'].to_dict()
         geojson_data = json.loads(json.dumps(mx_geojson)) 
         
@@ -288,7 +302,6 @@ try:
             options=lista_codigos,
             format_func=lambda codigo: f"{ESTADO_NOMBRES.get(codigo, f'Entidad {codigo}')}"  
         )
-        # Definición de nombre_estado antes de usarse
         nombre_estado = ESTADO_NOMBRES.get(entidad_seleccionada_codigo, f'Entidad {entidad_seleccionada_codigo}')
 
         df_filtrado = df_final[df_final['ent_resid'] == entidad_seleccionada_codigo]
@@ -332,14 +345,12 @@ st.header("4. Validación del Modelo (t-SNE 3D)")
 if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns:
     
     # 1. Mapeo de Colores Fijo para Plotly
-    # Plotly puede asignar colores aleatorios. Usaremos un mapeo fijo.
-    # Los nombres de los clusters deben coincidir con las claves del diccionario.
     color_map = {
-        'Adulto Joven - riesgo nocturno': '#ffc000',     # Amarillo
-        'Adulto Joven - riesgo vespertino': '#00ff00', # Verde
+        'Adulto Joven - riesgo nocturno': '#ffc000',      # Amarillo
+        'Adulto Joven - riesgo vespertino': '#00ff00',  # Verde
         'Adulto Joven - riesgo no especificado': '#00ffff',     # Cian
-        'Adulto Joven - sin ocupación': '#ff00ff',    # Magenta (FOCO)
-        'Adulto Mayor - analfabetismo': '#0000ff'  # Azul
+        'Adulto Joven - sin ocupación': '#ff00ff',     # Magenta (FOCO)
+        'Adulto Mayor - analfabetismo': '#0000ff'   # Azul
     }
 
     # --- CÓDIGO PARA GENERAR PLOTLY 3D ---
@@ -352,7 +363,6 @@ if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns:
         symbol='cluster_nombre',
         hover_data=['cluster_nombre'],
         title='Visualización de Clusters con t-SNE (3D)',
-        # Aplicamos el mapa de colores
         color_discrete_map=color_map 
     )
 
@@ -370,8 +380,3 @@ else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv' o '.json') exista y contenga la columna 'cluster_nombre'.")
 
 st.markdown("---")
-
-
-
-
-
