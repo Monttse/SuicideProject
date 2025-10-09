@@ -140,8 +140,7 @@ with col1:
     #st.subheader("Distribución Mensual")
     try:
         st.image('01.Dist_defunciones.PNG', use_container_width=True)
-        st.caption("Si bien las defunciones por muerte natural son la mayoría, 
-        se aprecia que otros tipo de defunción están incrementando a lo largo del tiempo")
+        st.caption("Si bien las defunciones por muerte natural son la mayoría, se aprecia que otros tipo de defunción están incrementando a lo largo del tiempo")
     except FileNotFoundError:
         st.warning("No se encontró la imagen: 01.Dist_defunciones.PNG")
 
@@ -150,8 +149,7 @@ with col2:
     #st.subheader("Distribución por Edad y Género")
     try:
         st.image('03.Dist_edad_genero_suicide.PNG', use_container_width=True)
-        st.caption("La mayor vulnerabilidad se presenta en el género masculino, alrededor de los 33 años;
-        sin embargo, el mayor riesgo en mujeres se da en edades más tempranas, antes de los 30 años.")
+        st.caption("La mayor vulnerabilidad se presenta en el género masculino, alrededor de los 33 años; sin embargo, el mayor riesgo en mujeres se da en edades más tempranas, antes de los 30 años.")
     except FileNotFoundError:
         st.warning("No se encontró la imagen: 03.Dist_edad_genero_suicide.PNG")
 
@@ -216,8 +214,7 @@ try:
         st.warning("No se pudo aplicar el gradiente de color: la columna de tamaño no fue encontrada.")
 
 
-    st.caption("El tamaño indica la cantidad de casos en cada grupo. Con ello, 
-    el grupo de mayor foco sería el de hombres de 32 años, con trabajo y en un horario nocturno")
+    st.caption("El tamaño indica la cantidad de casos en cada grupo. Con ello, el grupo de mayor foco sería el de hombres de 32 años, con trabajo y en un horario nocturno")
 
 except FileNotFoundError:
     st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
@@ -393,5 +390,6 @@ else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv') exista, contenga la columna 'cluster_nombre' y que los datos de cluster estén limpios de caracteres especiales.")
 
 st.markdown("---")
+
 
 
