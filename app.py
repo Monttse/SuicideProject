@@ -13,7 +13,6 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 # --- VARIABLES Y ARCHIVOS ---
 K_OPTIMO = 5
 PERFILES_PATH = 'perfiles.csv'       
-# Usamos la ruta CSV para mayor estabilidad
 TSNE_DATA_PATH = 'tsne_3d_data.csv' 
 GEOJSON_PATH = 'mexico.json'
 DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' # ID de Google Drive para el DataFrame principal
@@ -43,11 +42,11 @@ CLUSTER_NOMBRES = {
 }
 
 CLUSTER_DESCRIPCIONES = {
-    0: 'Adulto promedio (32 años), ocupado, con riesgo concentrado en la **madrugada** (00-05).',
-    1: 'Adulto promedio (32 años), ocupado, con alto riesgo en la **noche** (18-23) al finalizar la jornada.',
-    2: 'Adulto promedio (30 años), con gran cantidad de datos **no especificados**, y riesgo en la madrugada (00-05).',
-    3: '**Joven** (22 años), **desempleado** o inactivo. El foco principal de riesgo, concentrado en la **noche** (18-23).',
-    4: '**Adulto mayor** (60 años), ocupado, con riesgo concentrado en la **tarde** (12-17).'
+    0: 'Varón (33 años), soltero, con trabajo, con riesgo concentrado en la **madrugada** (00-05).',
+    1: 'Varón (32 años), soltero, con trabajo, con alto riesgo en la **noche** (18-23).',
+    2: 'Varón (31 años), soltero, con riesgos **no especificados**, y riesgo en la madrugada (00-05).',
+    3: '**Varón** (22 años), **desempleado** o inactivo. El foco principal de riesgo concentrado en la **noche** (18-23).',
+    4: '**Adulto mayor** (60 años), ocupado, educación básica, con riesgo concentrado en la **tarde** (12-17).'
 }
 
 
@@ -81,12 +80,10 @@ def load_data(file_id):
 
 @st.cache_data
 def load_tsne_data(path):
-    # CORRECCIÓN VITAL: SOLO LEER CSV y LIMPIAR CODIFICACIÓN
     try:
         if os.path.exists(path):
-            # Intentamos leer el CSV asumiendo codificación UTF-8
             df = pd.read_csv(path)
-            st.info("Cargando datos t-SNE desde archivo CSV.")
+            #st.info("Cargando datos t-SNE desde archivo CSV.")
         
         else:
             raise FileNotFoundError 
@@ -126,42 +123,44 @@ df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
 # --- COMIENZA LA INTERFAZ (UI) ---
 # ====================================================================
 
-st.title("Sistema de Identificación de Perfiles de Riesgo de Suicidio (2020-2023)")
-st.subheader("Modelado no Supervisado (K-Means) en Casos de Suicidio en México")
+st.title("Identificación de Perfiles de Riesgo de Suicidio en México")
+st.subheader("Modelo de clustering (K-Means) sobre defunciones en México (2020-2023)")
 st.markdown("---")
 
 # --------------------------------------------------------------------------------
 # --- SECCIÓN 1: VISUALIZACIONES DESCRIPTIVAS ---
 # --------------------------------------------------------------------------------
-st.header("1. Visualizaciones Descriptivas Clave")
+st.header("1. Estadísticas iniciales")
 st.markdown("Gráficas que contextualizan las características generales de la población de estudio (2020-2023).")
 
 col1, col2, col3 = st.columns(3)
 
 # GRÁFICA 1: Defunciones Totales
 with col1:
-    st.subheader("Distribución Mensual")
+    #st.subheader("Distribución Mensual")
     try:
         st.image('01.Dist_defunciones.PNG', use_container_width=True)
-        st.caption("Distribución de los casos, mostrando la estacionalidad (ej. picos en Marzo y Septiembre).")
+        st.caption("Si bien las defunciones por muerte natural son la mayoría, 
+        se aprecia que otros tipo de defunción están incrementando a lo largo del tiempo")
     except FileNotFoundError:
         st.warning("No se encontró la imagen: 01.Dist_defunciones.PNG")
 
 # GRÁFICA 2: Edad y Género
 with col2:
-    st.subheader("Distribución por Edad y Género")
+    #st.subheader("Distribución por Edad y Género")
     try:
         st.image('03.Dist_edad_genero_suicide.PNG', use_container_width=True)
-        st.caption("Comparativa por grupos de edad, resaltando la mayor vulnerabilidad en el género masculino joven.")
+        st.caption("La mayor vulnerabilidad se presenta en el género masculino, alrededor de los 33 años;
+        sin embargo, el mayor riesgo en mujeres se da en edades más tempranas, antes de los 30 años.")
     except FileNotFoundError:
         st.warning("No se encontró la imagen: 03.Dist_edad_genero_suicide.PNG")
 
 # GRÁFICA 3: Nivel Educativo
 with col3:
-    st.subheader("Distribución por Nivel Educativo")
+    #st.subheader("Distribución por Nivel Educativo")
     try:
         st.image('10.Dist_nivel_educativo_suicide.PNG', use_container_width=True)
-        st.caption("Concentración de casos por el nivel educativo formal alcanzado (Primaria, Secundaria, etc.).")
+        st.caption("Más del 80% de los casos se dan en personas con una educación de secundaria no concluída o menor.")
     except FileNotFoundError:
         st.warning("No se encontró la imagen: 10.Dist_nivel_educativo_suicide.PNG")
 
@@ -171,30 +170,41 @@ st.markdown("---")
 # --------------------------------------------------------------------------------
 # --- SECCIÓN 2: PERFILES DE RIESGO (TABLA) ---
 # --------------------------------------------------------------------------------
-st.header("2. Perfiles de Riesgo de Suicidio (K=5)")
-st.markdown("Tabla resumen que describe las características principales de cada grupo.")
+st.header("2. Perfiles de Riesgo")
+st.markdown("Principales características de cada grupo.")
 
 try:
     df_perfiles = pd.read_csv(PERFILES_PATH)
     
     # 1. Mapeo y Renombre
+    
+    columna_mes = None
     if 'Mes ocurrencia' in df_perfiles.columns:
-        df_perfiles['Mes ocurrencia'] = df_perfiles['Mes ocurrencia'].map(MES_NOMBRES)
+        columna_mes = 'Mes ocurrencia'
+    elif 'Mes Frecuente' in df_perfiles.columns:
+        columna_mes = 'Mes Frecuente'
+        
+    if columna_mes:
+        # Aseguramos que los valores sean números antes de mapear
+        df_perfiles[columna_mes] = pd.to_numeric(df_perfiles[columna_mes], errors='coerce').fillna(0).astype(int)
+        df_perfiles[columna_mes] = df_perfiles[columna_mes].map(MES_NOMBRES).fillna('NE') # Mapea 1->Ene, 2->Feb, etc.
 
     df_perfiles['cluster'] = df_perfiles['cluster'].map(CLUSTER_NOMBRES)
     df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
     
-    # FIX: Lógica mejorada para encontrar la columna de tamaño
+    # 2. Lógica para encontrar la columna de tamaño
     subset_col = None
-    nombres_posibles_tamano = ['Tamaño', 'tamano_temp', 'tamano'] 
+    nombres_posibles_tamano = ['Tamaño del Cluster', 'Tamaño', 'tamano_temp', 'tamano'] 
 
     for nombre in nombres_posibles_tamano:
         if nombre in df_perfiles.columns:
-            df_perfiles.rename(columns={nombre: 'Tamaño del Cluster'}, inplace=True)
+            # Renombramos al nombre estándar para la visualización si es diferente
+            if nombre != 'Tamaño del Cluster':
+                df_perfiles.rename(columns={nombre: 'Tamaño del Cluster'}, inplace=True)
             subset_col = 'Tamaño del Cluster'
             break
     
-    # 3. Mostrar la tabla con gradiente (usando el nombre asegurado)
+    # 3. Mostrar la tabla con gradiente
     if subset_col and subset_col in df_perfiles.columns:
         st.dataframe(
             df_perfiles.style.background_gradient(cmap='YlOrRd', subset=[subset_col]),
@@ -206,7 +216,9 @@ try:
         st.warning("No se pudo aplicar el gradiente de color: la columna de tamaño no fue encontrada.")
 
 
-    st.caption("Los 5 perfiles identificados por K-Means. El tamaño indica la cantidad de casos en cada grupo.")
+    st.caption("El tamaño indica la cantidad de casos en cada grupo. Con ello, 
+    el grupo de mayor foco sería el de hombres de 32 años, con trabajo y en un horario nocturno")
+
 except FileNotFoundError:
     st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
 except Exception as e:
@@ -218,7 +230,7 @@ st.markdown("---")
 # --------------------------------------------------------------------------------
 # --- SECCIÓN 3: MAPA Y ANÁLISIS GEOGRÁFICO ---
 # --------------------------------------------------------------------------------
-st.header("3. Foco de Intervención Geográfica")
+st.header("3. Evaluación Geográfica")
 
 try:
     mx_geojson = load_geojson(GEOJSON_PATH) 
@@ -294,12 +306,12 @@ try:
         st.markdown("---")
         
         # --- ANÁLISIS DETALLADO POR ENTIDAD (Gráfico Plotly) ---
-        st.subheader("Análisis Detallado por Entidad")
+        st.subheader("Representación de Grupos por Entidad")
         
         lista_codigos = sorted(df_final['ent_resid'].unique().tolist())
             
         entidad_seleccionada_codigo = st.selectbox(
-            'Selecciona una Entidad de Residencia:',
+            'Selecciona una e    ntidad:',
             options=lista_codigos,
             format_func=lambda codigo: f"{ESTADO_NOMBRES.get(codigo, f'Entidad {codigo}')}"  
         )
@@ -341,7 +353,7 @@ st.markdown("---")
 # --------------------------------------------------------------------------------
 # --- SECCIÓN 4: VALIDACIÓN DEL MODELO (t-SNE 3D INTERACTIVO) ---
 # --------------------------------------------------------------------------------
-st.header("4. Validación del Modelo (t-SNE 3D)")
+st.header("4. Visualización de Grupos")
 
 if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns and not df_tsne_3d.empty:
     
@@ -375,10 +387,11 @@ if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns and not df_
 
     # Mostrar el gráfico interactivo
     st.plotly_chart(fig_3d, use_container_width=True) 
-    st.caption("Gráfico interactivo de t-SNE que valida la separación clara de los 5 perfiles.")
+    st.caption("El solapamiento de los grupos hace alusión a la complejidad de la población. Es decir, casos que comparten características con más de un perfil de riesgo.")
     
 else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv') exista, contenga la columna 'cluster_nombre' y que los datos de cluster estén limpios de caracteres especiales.")
 
 st.markdown("---")
+
 
