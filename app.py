@@ -102,12 +102,12 @@ def load_tsne_data(path):
     
     return df
     
-except FileNotFoundError:
-    st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Asegúrate de que uno de los dos exista.")
-    return None
-except Exception as e:
-    st.error(f"Error al cargar datos t-SNE 3D: {e}")
-    return None
+    except FileNotFoundError:
+        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Asegúrate de que uno de los dos exista.")
+        return None
+    except Exception as e:
+        st.error(f"Error al cargar datos t-SNE 3D: {e}")
+        return None
 
 # --- LLAMADA INICIAL DE DATOS ---
 df_final = load_data(DF_FILE_ID)
@@ -370,6 +370,7 @@ else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv' o '.json') exista y contenga la columna 'cluster_nombre'.")
 
 st.markdown("---")
+
 
 
 
