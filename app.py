@@ -82,10 +82,22 @@ def load_data(file_id):
 @st.cache_data
 def load_tsne_data(path):
     try:
+        # Usamos read_csv si es más fácil de generar en tu entorno, 
+        # o un método de lectura de JSON más simple si el 'orient' falla.
+        # Asumiremos que si lo cambias a un CSV funciona mejor:
+        # Recomiendo guardar en el script de modelado como: df_tsne_3d.to_csv('tsne_3d_data.csv', index=False)
+               
+        # SI LO GUARDASTE COMO JSON:
         df = pd.read_json(path, orient='records')
+        
+        # Corregir el tipo de dato de la columna de cluster
+        if 'cluster_nombre' in df.columns:
+             df['cluster_nombre'] = df['cluster_nombre'].astype(str)
+        
         return df
+        
     except FileNotFoundError:
-        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path}.")
+        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Intenta generarlo como CSV.")
         return None
     except Exception as e:
         st.error(f"Error al cargar datos t-SNE 3D: {e}")
@@ -93,6 +105,8 @@ def load_tsne_data(path):
 
 # --- LLAMADA INICIAL DE DATOS ---
 df_final = load_data(DF_FILE_ID)
+# Ajusta la ruta si decidiste guardar como CSV
+TSNE_DATA_PATH = 'tsne_3d_data.csv' 
 df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
 
 
@@ -310,23 +324,36 @@ st.markdown("---")
 # --------------------------------------------------------------------------------
 st.header("4. Validación del Modelo (t-SNE 3D)")
 
-if df_tsne_3d is not None:
+if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns:
+    
+    # 1. Mapeo de Colores Fijo para Plotly
+    # Plotly puede asignar colores aleatorios. Usaremos un mapeo fijo.
+    # Los nombres de los clusters deben coincidir con las claves del diccionario.
+    color_map = {
+        'Adulto Joven - riesgo nocturno': '#ffc000',     # Amarillo
+        'Adulto Joven - riesgo vespertino': '#00ff00', # Verde
+        'Adulto Joven - riesgo no especificado': '#00ffff',     # Cian
+        'Adulto Joven - sin ocupación': '#ff00ff',    # Magenta (FOCO)
+        'Adulto Mayor - analfabetismo': '#0000ff'  # Azul
+    }
+
     # --- CÓDIGO PARA GENERAR PLOTLY 3D ---
     fig_3d = px.scatter_3d(
         df_tsne_3d,
         x='Componente_1',
         y='Componente_2',
         z='Componente_3',
-        color='cluster_nombre', # Usamos los nombres para el color
+        color='cluster_nombre', 
         symbol='cluster_nombre',
         hover_data=['cluster_nombre'],
         title='Visualización de Clusters con t-SNE (3D)',
+        # Aplicamos el mapa de colores
+        color_discrete_map=color_map 
     )
 
-    # Ajuste de tamaño decente (altura de 700px)
+    # Ajuste de tamaño
     fig_3d.update_layout(
         height=700,
-        width=1000, # El use_container_width lo ajustará
         legend_title_text='Perfil de Riesgo'
     )
 
@@ -335,7 +362,9 @@ if df_tsne_3d is not None:
     st.caption("Gráfico interactivo de t-SNE que valida la separación clara de los 5 perfiles.")
     
 else:
-    st.warning("No se pudo cargar la visualización 3D. Asegúrate de generar y subir 'tsne_3d_data.json'.")
+    st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv' o '.json') exista y contenga la columna 'cluster_nombre'.")
 
 st.markdown("---")
+
+
 
