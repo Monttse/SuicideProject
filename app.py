@@ -13,7 +13,7 @@ st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide"
 # --- VARIABLES Y ARCHIVOS ---
 K_OPTIMO = 5
 PERFILES_PATH = 'perfiles.csv'       
-# Cambiamos la ruta a CSV para mayor estabilidad
+# Usamos la ruta CSV para mayor estabilidad
 TSNE_DATA_PATH = 'tsne_3d_data.csv' 
 GEOJSON_PATH = 'mexico.json'
 DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' # ID de Google Drive para el DataFrame principal
@@ -81,31 +81,37 @@ def load_data(file_id):
 
 @st.cache_data
 def load_tsne_data(path):
-    # CORRECCIÓN DE SINTAXIS: El bloque try/except ahora es correcto
+    # CORRECCIÓN VITAL: SOLO LEER CSV y LIMPIAR CODIFICACIÓN
     try:
-        # Intentamos cargar el CSV (ruta preferida)
-        if path.endswith('.csv') and os.path.exists(path):
+        if os.path.exists(path):
+            # Intentamos leer el CSV asumiendo codificación UTF-8
             df = pd.read_csv(path)
             st.info("Cargando datos t-SNE desde archivo CSV.")
         
-        # Si la ruta es .json y existe (por si acaso), usamos el módulo JSON nativo
-        elif path.endswith('.json') and os.path.exists(path):
-            st.info("Cargando datos t-SNE desde archivo JSON (Módulo nativo).")
-            with open(path, 'r') as f:
-                data = json.load(f) 
-            df = pd.DataFrame(data) 
         else:
-            raise FileNotFoundError # Si ninguno de los dos existe, lanzamos error
-            
+            raise FileNotFoundError 
 
-        # Post-Procesamiento (común)
+        # Post-Procesamiento (Limpieza de caracteres mal codificados)
         if 'cluster_nombre' in df.columns:
+            # 1. Convierte a string
             df['cluster_nombre'] = df['cluster_nombre'].astype(str)
-        
+            
+            # 2. Limpia los caracteres de codificación incorrecta (ej: Ã³ -> ó)
+            # Esto corrige el problema visual de Plotly con texto sucio
+            df['cluster_nombre'] = df['cluster_nombre'].str.replace('Ã³', 'ó', regex=False)
+            df['cluster_nombre'] = df['cluster_nombre'].str.replace('Ã¡', 'á', regex=False)
+            df['cluster_nombre'] = df['cluster_nombre'].str.replace('Ã±', 'ñ', regex=False)
+            df['cluster_nombre'] = df['cluster_nombre'].str.replace('Â', '', regex=False) # Carácter fantasma común
+            
+            # 3. Asegura que los nombres coincidan exactamente con el mapeo
+            # Esto es una comprobación de seguridad si la limpieza no es perfecta:
+            nombres_validos = list(CLUSTER_NOMBRES.values())
+            df = df[df['cluster_nombre'].isin(nombres_validos)]
+
         return df
     
     except FileNotFoundError:
-        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path}.")
+        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path}. Asegúrate de que 'tsne_3d_data.csv' exista.")
         return None
     except Exception as e:
         st.error(f"Error al cargar datos t-SNE 3D: {e}")
@@ -113,7 +119,6 @@ def load_tsne_data(path):
 
 # --- LLAMADA INICIAL DE DATOS ---
 df_final = load_data(DF_FILE_ID)
-# TSNE_DATA_PATH ya fue cambiado a 'tsne_3d_data.csv' arriba
 df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
 
 
@@ -179,20 +184,16 @@ try:
     df_perfiles['cluster'] = df_perfiles['cluster'].map(CLUSTER_NOMBRES)
     df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
     
-    # FIX: Identificar el nombre de la columna de tamaño del cluster
-    subset_col = 'Tamaño' # Nombre final deseado
+    # FIX: Lógica mejorada para encontrar la columna de tamaño
+    subset_col = None
+    nombres_posibles_tamano = ['Tamaño', 'tamano_temp', 'tamano'] 
 
-    # Mapear el nombre original ('tamano_temp' o 'Tamaño') al nombre final
-    if 'tamano_temp' in df_perfiles.columns:
-        df_perfiles.rename(columns={'tamano_temp': subset_col}, inplace=True)
-    elif 'Tamaño' not in df_perfiles.columns:
-         # Usar el nombre que ya existe si 'tamano_temp' no está y 'Tamaño' no es el nombre
-         # Usaremos 'tamano' como fallback. Revisa tu CSV si esto falla.
-         if 'tamano' in df_perfiles.columns:
-              df_perfiles.rename(columns={'tamano': subset_col}, inplace=True)
-         else:
-              subset_col = None # No se encontró la columna de tamaño
-
+    for nombre in nombres_posibles_tamano:
+        if nombre in df_perfiles.columns:
+            df_perfiles.rename(columns={nombre: 'Tamaño del Cluster'}, inplace=True)
+            subset_col = 'Tamaño del Cluster'
+            break
+    
     # 3. Mostrar la tabla con gradiente (usando el nombre asegurado)
     if subset_col and subset_col in df_perfiles.columns:
         st.dataframe(
@@ -202,10 +203,10 @@ try:
         )
     else:
         st.dataframe(df_perfiles, hide_index=True, use_container_width=True)
-        st.warning("No se pudo aplicar el gradiente de color: la columna de tamaño no fue encontrada. Asegúrate de que se llama 'tamano_temp' o 'Tamaño' en el CSV.")
+        st.warning("No se pudo aplicar el gradiente de color: la columna de tamaño no fue encontrada.")
+
 
     st.caption("Los 5 perfiles identificados por K-Means. El tamaño indica la cantidad de casos en cada grupo.")
-
 except FileNotFoundError:
     st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
 except Exception as e:
@@ -245,7 +246,7 @@ try:
         df_conteo_cluster = df_final[df_final['cluster'] == cluster_seleccionado_id].groupby('ent_resid').size().reset_index(name='Casos Cluster')
         
         df_mapa = pd.merge(df_conteo_total, df_conteo_cluster, on='ent_resid', how='left').fillna(0)
-        df_mapa['Porcentaje Cluster'] = (df_mapa['Casos Cluster'] / df_mapa['Total Casos']) * 100
+        df_mapa['Porcentaje Cluster'] = (df_mapa['Casos Cluster'] / df_conteo_total['Total Casos']) * 100
         df_mapa.rename(columns={'ent_resid': 'CVE_ENT'}, inplace=True)
         
         max_porcentaje = df_mapa['Porcentaje Cluster'].max()
@@ -342,7 +343,7 @@ st.markdown("---")
 # --------------------------------------------------------------------------------
 st.header("4. Validación del Modelo (t-SNE 3D)")
 
-if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns:
+if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns and not df_tsne_3d.empty:
     
     # 1. Mapeo de Colores Fijo para Plotly
     color_map = {
@@ -377,6 +378,7 @@ if df_tsne_3d is not None and 'cluster_nombre' in df_tsne_3d.columns:
     st.caption("Gráfico interactivo de t-SNE que valida la separación clara de los 5 perfiles.")
     
 else:
-    st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv' o '.json') exista y contenga la columna 'cluster_nombre'.")
+    st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv') exista, contenga la columna 'cluster_nombre' y que los datos de cluster estén limpios de caracteres especiales.")
 
 st.markdown("---")
+
