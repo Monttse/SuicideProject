@@ -8,18 +8,18 @@ import os
 import pydeck as pdk
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Perfiles de Riesgo de Suicidio MX", layout="wide")
+st.set_page_config(page_title="Perfiles de Riesgo de Suicidio México", layout="wide")
 
 # --- VARIABLES Y ARCHIVOS ---
-K_OPTIMO = 4 
-PERFILES_PATH = 'perfiles.csv'     
-TSNE_PATH = '13.tsne.PNG'          
+K_OPTIMO = 5 # 
+PERFILES_PATH = 'perfiles.csv'
+TSNE_PATH = '13.tsne.PNG'        
 
-# RUTA LOCAL EN GITHUB (¡VERIFICA QUE EL ARCHIVO EXISTA Y ESTÉ BIEN NOMBRADO!)
+# RUTA LOCAL EN GITHUB
 GEOJSON_PATH = 'mexico.json' 
 
 # ID DE GOOGLE DRIVE para el DataFrame principal
-DF_FILE_ID = '1UM9B_EJ5K_D_H-XGYaGhX6IDP79Gki1M' 
+DF_FILE_ID = '1li-MLpM6vpkgwLkvv2TLRqNhR_kqDWnp' 
 
 # -----------------------------------------------------------
 # --- FUNCIONES DE CARGA DE DATOS ---
@@ -61,26 +61,7 @@ df_final = load_data(DF_FILE_ID)
 # ====================================================================
 # --- COMIENZA LA INTERFAZ (UI) ---
 # ====================================================================
-
-st.title("Sistema de Identificación de Perfiles de Riesgo de Suicidio (2020-2023)")
-st.subheader("Modelado no Supervisado (K-Means) en Casos de Suicidio en México")
-st.markdown("---")
-
-# --- SECCIÓN 1: PERFILES DE RIESGO ---
-try:
-    df_perfiles = pd.read_csv(PERFILES_PATH)
-    st.dataframe(
-        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño del Cluster']),
-        hide_index=True,
-        use_container_width=True
-    )
-    st.caption("Los 4 perfiles se definen por la moda de variables sociodemográficas (sexo, ocupación, horario) y el promedio de la edad.")
-except FileNotFoundError:
-    st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
-st.markdown("---")
-
-
-# --- Mapeo de Nombres de Estado y Clusters (AGREGAR ESTO AL INICIO DE TU APP.PY, despuÉs de las variables) ---
+# --- Mapeo de Nombres de Estado y Clusters ---
 
 ESTADO_NOMBRES = {
     '01': 'Aguascalientes', '02': 'Baja California', '03': 'Baja California Sur', 
@@ -94,14 +75,47 @@ ESTADO_NOMBRES = {
     '32': 'Zacatecas'
 }
 
+MES_NOMBRES = {1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'}
+
 CLUSTER_NOMBRES = {
-    0: 'Joven Inactivo (Desempleo)',
-    1: 'Adulto Mayor Ocupado (Riesgo Vespertino)',
-    2: 'Adulto Joven Ocupado (Foco Principal)',
-    3: 'Riesgo Desconocido (Madrugada)'
+    0: 'Adulto Joven - riesgo nocturno',
+    1: 'Adulto Joven - riesgo vespertino',
+    2: 'Adulto Joven - riesgo no especificado',
+    3: 'Adulto Joven - sin ocupación',
+    4: 'Adulto Mayor - analfabetismo' 
 }
 
-# --- SECCIÓN 2: MAPA Y ANÁLISIS GEOGRÁFICO (El bloque try/except) ---
+st.title("Sistema de Identificación de Perfiles de Riesgo de Suicidio (2020-2023)")
+st.subheader("Modelado no Supervisado (K-Means) en Casos de Suicidio en México")
+st.markdown("---")
+
+# --- SECCIÓN 1: PERFILES DE RIESGO ---
+st.header("1. Perfiles de Riesgo de Suicidio (K=5)")
+st.markdown("Tabla resumen que describe las características principales de cada grupo (moda para categóricas, media para edad).")
+
+try:
+    df_perfiles = pd.read_csv(PERFILES_PATH)
+    
+    # 1. Mapeo del número de Mes a Nombre para la visualización
+    if 'Mes Frecuente' in df_perfiles.columns:
+        df_perfiles['Mes Frecuente'] = df_perfiles['Mes Frecuente'].map(MES_NOMBRES)
+
+    # 2. Reemplazar IDs de Cluster por los nombres descriptivos
+    # Esto es crucial para la leyenda
+    df_perfiles['cluster'] = df_perfiles['cluster'].map(CLUSTER_NOMBRES)
+    df_perfiles.rename(columns={'cluster': 'Perfil de Riesgo'}, inplace=True)
+
+    st.dataframe(
+        df_perfiles.style.background_gradient(cmap='YlOrRd', subset=['Tamaño del Cluster']),
+        hide_index=True,
+        use_container_width=True
+    )
+    st.caption("Los 5 perfiles identificados por K-Means. El tamaño indica la cantidad de casos en cada grupo.")
+except FileNotFoundError:
+    st.error(f"⚠️ Error: No se pudo cargar la tabla de perfiles en {PERFILES_PATH}.")
+st.markdown("---")
+
+# --- SECCIÓN 2: MAPA Y ANÁLISIS GEOGRÁFICO
 st.header("2. Foco de Intervención Geográfica")
 
 try:
@@ -202,12 +216,30 @@ try:
         )
 
         df_filtrado = df_final[df_final['ent_resid'] == entidad_seleccionada_codigo]
+        
+        # Filtrar solo los clusters existentes (0 a 4)
         distribucion_cluster = df_filtrado['cluster'].value_counts(normalize=True).mul(100).sort_index()
         
-        st.bar_chart(distribucion_cluster)
-        # CORRECCIÓN: La leyenda muestra el nombre completo
+        # 1. Asignar nombres a los clusters para el eje X
+        distribucion_cluster.index = distribucion_cluster.index.map(CLUSTER_NOMBRES)
+
+        # 2. Crear la gráfica de barras con Plotly Express (Control de Eje X y Color)
+        fig_bar = px.bar(
+            distribucion_cluster,
+            y=distribucion_cluster.values, # Valores de Porcentaje
+            x=distribucion_cluster.index,  # Nombres de Cluster
+            labels={'y': 'Porcentaje de Casos (%)', 'x': 'Perfil de Riesgo'},
+            title=f"Distribución de Perfiles en {nombre_estado}",
+            color_discrete_sequence=['#CC0000'] # Color Rojo oscuro uniforme
+        )
+        
+        # Asegura el orden correcto de los clusters en el eje X
+        fig_bar.update_layout(xaxis={'categoryorder':'array', 'categoryarray': list(CLUSTER_NOMBRES.values())})
+        
+        st.plotly_chart(fig_bar, use_container_width=True)
+
         nombre_estado = ESTADO_NOMBRES.get(entidad_seleccionada_codigo, f'Entidad {entidad_seleccionada_codigo}')
-        st.caption(f"Distribución porcentual de los 4 perfiles en {nombre_estado}.")
+        st.caption(f"Distribución porcentual de los 5 perfiles en {nombre_estado}.")
 
     elif df_final is None:
          st.error("No se pudo cargar el DataFrame principal.")
@@ -220,14 +252,52 @@ except Exception as e:
 st.markdown("---")
 
 # --- SECCIÓN 3: VALIDACIÓN DEL MODELO (t-SNE) ---
-st.header("3. Validación y Caracterización del Modelo (t-SNE)")
+st.header("3. Visualizaciones Descriptivas Clave")
+st.markdown("Gráficas que contextualizan las características generales de la población de estudio (2020-2023).")
+
+# Crear 3 columnas para imágenes más pequeñas
+col1, col2, col3 = st.columns(3)
+
+# GRÁFICA 1: Defunciones Totales
+with col1:
+    st.subheader("01. Defunciones por Mes")
+    try:
+        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
+        st.image('01.Dist_defunciones.PNG', use_container_width=True)
+        st.caption("Distribución de los casos, mostrando la estacionalidad (ej. picos en Marzo y Septiembre).")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 01.Dist_defunciones.PNG")
+
+# GRÁFICA 2: Edad y Género
+with col2:
+    st.subheader("03. Distribución por Edad y Género")
+    try:
+        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
+        st.image('03.Dist_edad_genero_suicide.PNG', use_container_width=True)
+        st.caption("Comparativa por grupos de edad, resaltando la mayor vulnerabilidad en el género masculino joven.")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 03.Dist_edad_genero_suicide.PNG")
+
+# GRÁFICA 3: Nivel Educativo
+with col3:
+    st.subheader("10. Distribución por Nivel Educativo")
+    try:
+        # Nota: Asegúrate que el archivo esté en GitHub con este nombre
+        st.image('10.Dist_nivel_educativo_suicide.PNG', use_container_width=True)
+        st.caption("Concentración de casos por el nivel educativo formal alcanzado (Primaria, Secundaria, etc.).")
+    except FileNotFoundError:
+        st.warning("No se encontró la imagen: 10.Dist_nivel_educativo_suicide.PNG")
+
+st.markdown("---")
+
+# --- SECCIÓN 4: T-SNE 2D/3D (Usando el archivo 13.tsne.PNG por ahora) ---
+st.header("4. Validación del Modelo (t-SNE)")
 
 try:
-    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE", use_container_width=True) 
+    st.image(TSNE_PATH, caption="Visualización de Clusters con t-SNE (K=5).", use_container_width=True)
+    st.caption("La clara separación de los 5 colores valida la elección de K=5 como número óptimo.")
 except FileNotFoundError:
-    st.error(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
-
-
+    st.warning(f"Error: No se encontró la imagen del t-SNE en {TSNE_PATH}.")
 
 
 
