@@ -81,34 +81,39 @@ def load_data(file_id):
 
 @st.cache_data
 def load_tsne_data(path):
+    # Intentamos primero cargar como CSV, que es más simple
     try:
-        # Usamos read_csv si es más fácil de generar en tu entorno, 
-        # o un método de lectura de JSON más simple si el 'orient' falla.
-        # Asumiremos que si lo cambias a un CSV funciona mejor:
-        # Recomiendo guardar en el script de modelado como: df_tsne_3d.to_csv('tsne_3d_data.csv', index=False)
-               
-        # SI LO GUARDASTE COMO JSON:
-        df = pd.read_json(path, orient='records')
-        
-        # Corregir el tipo de dato de la columna de cluster
-        if 'cluster_nombre' in df.columns:
-             df['cluster_nombre'] = df['cluster_nombre'].astype(str)
-        
-        return df
+        df = pd.read_csv(path.replace('.json', '.csv'))
+        st.info("Cargando datos t-SNE desde archivo CSV.")
         
     except FileNotFoundError:
-        st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Intenta generarlo como CSV.")
-        return None
-    except Exception as e:
-        st.error(f"Error al cargar datos t-SNE 3D: {e}")
-        return None
+        # Si no existe el CSV, intentamos cargarlo usando el módulo JSON nativo
+        if path.endswith('.json'):
+            st.info("Cargando datos t-SNE desde archivo JSON (Módulo nativo).")
+            with open(path, 'r') as f:
+                data = json.load(f) # Usa el módulo nativo 'json'
+            df = pd.DataFrame(data) # Crea el DataFrame a partir de la lista de diccionarios
+        else:
+            raise FileNotFoundError # Re-lanza el error si no es CSV ni JSON
+
+    # Post-Procesamiento (común a CSV o JSON)
+    if 'cluster_nombre' in df.columns:
+        df['cluster_nombre'] = df['cluster_nombre'].astype(str)
+    
+    return df
+    
+except FileNotFoundError:
+    st.warning(f"Advertencia: No se encontró el archivo de datos 3D en {path} o {path.replace('.json', '.csv')}. Asegúrate de que uno de los dos exista.")
+    return None
+except Exception as e:
+    st.error(f"Error al cargar datos t-SNE 3D: {e}")
+    return None
 
 # --- LLAMADA INICIAL DE DATOS ---
 df_final = load_data(DF_FILE_ID)
-# Ajusta la ruta si decidiste guardar como CSV
-TSNE_DATA_PATH = 'tsne_3d_data.csv' 
+# Usaremos .json en la variable, pero la función intentará cargar el .csv si existe
+TSNE_DATA_PATH = 'tsne_3d_data.json' 
 df_tsne_3d = load_tsne_data(TSNE_DATA_PATH)
-
 
 # ====================================================================
 # --- COMIENZA LA INTERFAZ (UI) ---
@@ -365,6 +370,7 @@ else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv' o '.json') exista y contenga la columna 'cluster_nombre'.")
 
 st.markdown("---")
+
 
 
 
