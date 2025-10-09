@@ -326,7 +326,7 @@ try:
             x=distribucion_cluster.index,
             labels={'y': 'Porcentaje de Casos (%)', 'x': 'Perfil de Riesgo'},
             title=f"Distribución de Perfiles en {nombre_estado}",
-            color_discrete_sequence=['#CC0000'] 
+            color_discrete_sequence=['#7D5B77'] 
         )
         
         fig_bar.update_layout(xaxis={'categoryorder':'array', 'categoryarray': list(CLUSTER_NOMBRES.values())})
@@ -390,6 +390,7 @@ else:
     st.warning("No se pudo generar la visualización 3D. Verifica que el archivo de datos ('tsne_3d_data.csv') exista, contenga la columna 'cluster_nombre' y que los datos de cluster estén limpios de caracteres especiales.")
 
 st.markdown("---")
+
 
 
 
